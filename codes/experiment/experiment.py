@@ -12,7 +12,7 @@ from codes.utils.data import DataUtility, generate_dictionary
 from codes.utils.log import write_metric_logs, write_config_log, write_metadata_logs, write_sequences
 from codes.metric.metric_registry import get_metric_dict
 from codes.metric.quality_metric import QualityMetric
-from codes.onmt.generator import Generator
+from codes.net.generator import Generator
 from codes.utils.experiment_utils import Experiment
 
 import logging
@@ -45,8 +45,6 @@ def run_experiment(config, exp):
     config.model.vocab_size = vocab_size
     config.model.target_size = target_size
     config.model.max_nodes = data_util.max_ents
-    logging.info("Max nodes : {}".format(config.model.max_nodes))
-    logging.info("Max sentence length : {}".format(data_util.max_sent_length))
     config.model.max_sent_length = data_util.max_sent_length
 
     logging.info("Loading testing data")

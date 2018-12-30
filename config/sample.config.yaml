@@ -25,8 +25,7 @@ dataset:
   max_vocab: -1
   tokenization: word
   common_dict: true
-  sentence_mode: false
-  single_abs_line: true  # makes every story-abstract pair with abstracts as single lines
+  sentence_mode: false #sentence mode processes each input story sentence separately. For GNN, this helps to maintaining a node pair -> sentence mapping
   only_relation: false  # set this value to true when testing only relations as single words. Only works in toy data.
 model:
   name: baseline1

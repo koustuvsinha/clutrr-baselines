@@ -14,6 +14,7 @@ from codes.net.batch import Batch
 from codes.utils.config import get_config
 import os
 import json
+from ast import literal_eval as make_tuple
 import logging
 logging.basicConfig(
     level=logging.INFO,
@@ -28,6 +29,21 @@ UNK_WORD = '<unk>'
 PAD_TOKEN = '<pad>'
 START_TOKEN = '<s>'
 END_TOKEN = '</s>'
+
+class DataRow():
+    """
+    Defines a single instance of data row
+    """
+    def __init__(self):
+        self.id = None
+        self.story = None
+        self.story_sents = None # same story, but sentence tokenized
+        self.query = None
+        self.text_query = None
+        self.target = None
+        self.text_target = None
+        self.story_graph = None
+
 
 class DataUtility():
     """
@@ -63,8 +79,9 @@ class DataUtility():
         self.id2word = {}
         self.target_word2id = {}
         self.target_id2word = {}
-        # dict of summary pairs
-        self.summaryPairs = {'train':[], 'test':{}}
+        # dict of dataRows
+        # all rows are indexed by their key `id`
+        self.dataRows = {'train':{}, 'test':{}}
 
         self.train_indices = []
         self.test_indices = []
@@ -81,11 +98,17 @@ class DataUtility():
         self.test_file = ''
         self.max_ents = 0
         self.entity_ids = []
+        self.entity_map = {} # map entity for each puzzle
         self.max_entity_id = 0
         self.adj_graph = []
         self.dummy_entity = '' # return this entity when UNK entity
         self.load_dictionary = config.dataset.load_dictionary
         self.max_sent_length = 0
+        # check_data flags
+        self.data_has_query = False
+        self.data_has_text_query = False
+        self.data_has_target = False
+        self.data_has_text_target = False
 
     def process_data(self, base_path, train_file, load_dictionary=True):
         """
@@ -112,7 +135,7 @@ class DataUtility():
         train_data, max_ents_train, = self.process_entities(train_data)
         if not load_dictionary:
             self.max_ents = max_ents_train + 1 # keep an extra dummy entity for unknown entities
-        self.preprocess(train_data, mode='train', common_dict=self.common_dict)
+        self.preprocess(train_data, mode='train')
         self.train_data = train_data
         self.split_indices()
 
@@ -130,7 +153,7 @@ class DataUtility():
         p_tests = []
         for ti, test_data in enumerate(test_datas):
             test_data, max_ents_test, = self.process_entities(test_data)
-            self.preprocess(test_data, mode='test', common_dict=self.common_dict,
+            self.preprocess(test_data, mode='test',
                             test_file=test_files[ti])
             p_tests.append(test_data)
         self.test_data = p_tests
@@ -139,16 +162,35 @@ class DataUtility():
 
     def _check_data(self, data):
         """
-        Check if the file has correct headers
+        Check if the file has correct headers.
+        For all the subsequent experiments, make sure that the dataset generated
+        or curated has the following fields:
+        - id : unique uuid for each puzzle          : required
+        - story : input text                        : required
+        - query : query entities                    : optional
+        - text_query : the question for QA models   : optional
+        - target : classification target            : required if config.model.loss_type set to classify
+        - text_target : seq2seq target              : required if config.model.loss_type set to seq2seq
         :param data:
         :return:
         """
+        assert "id" in list(data.columns)
         assert "story" in list(data.columns)
-        assert "summary" in list(data.columns)
+        if self.config.model.loss_type == 'classify':
+            assert "target" in list(data.columns)
+            self.data_has_target = True
+        if self.config.model.loss_type == 'seq2seq':
+            assert "text_target" in list(data.columns)
+            self.data_has_text_target = True
+        if "query" in list(data.columns):
+            self.data_has_query = True
+        if "text_query" in list(data.columns):
+            self.data_has_text_query = True
 
     def process_entities(self, data, placeholder='[]'):
         """
-        extract entities and replace them with placeholders
+        extract entities and replace them with placeholders.
+        Also maintain a per-puzzle mapping of entities
         :param placeholder: if [] then simply use regex to extract entities as they are already in
         a placeholder. If None, then use Spacy EntityTokenizer
         :return: max number of entities in dataset
@@ -157,77 +199,98 @@ class DataUtility():
         if placeholder == '[]':
             for i,row in data.iterrows():
                 story = row['story']
-                summary = row['summary']
                 ents = re.findall('\[(.*?)\]', story)
                 uniq_ents = set(ents)
                 if len(uniq_ents) > max_ents:
                     max_ents = len(uniq_ents)
+                pid = row['id']
+                query = row['query'] if self.data_has_query else ''
+                text_query = row['text_query'] if self.data_has_text_query else ''
+                text_target = row['text_target'] if self.data_has_text_target else ''
+                entity_map = {}
                 for idx, ent in enumerate(uniq_ents):
-                    story = story.replace('[{}]'.format(ent), '@ent{}'.format(idx))
-                    summary = summary.replace('[{}]'.format(ent), '@ent{}'.format(idx))
+                    entity_map[ent] = '@ent{}'.format(idx)
+                    story = story.replace('[{}]'.format(ent), entity_map[ent])
+                    text_target = text_target.replace('[{}]'.format(ent), entity_map[ent])
+                    text_query = text_query.replace('[{}]'.format(ent), entity_map[ent])
+                    query = query.replace('{}'.format(ent), entity_map[ent])
                 data.at[i, 'story'] = story
-                data.at[i, 'summary'] = summary
-                data.at[i, 'entities'] =  json.dumps(list(uniq_ents))
+                data.at[i, 'text_target'] = text_target
+                data.at[i, 'text_query'] = text_query
+                data.at[i, 'query'] = query
+                data.at[i, 'entities'] = json.dumps(list(uniq_ents))
+                self.entity_map[pid] = entity_map
         else:
             raise NotImplementedError("Not implemented, should replace with a tokenization policy")
         return data, max_ents
 
-    def preprocess(self, data, mode='train', common_dict=True, single_abs_line=True, test_file=''):
+    def preprocess(self, data, mode='train', single_abs_line=True, test_file=''):
         """
         Usual preprocessing: tokenization, lowercase, and create word dictionaries
         Also, split stories into sentences
         :param single_abs_line: if True, separate the abstracts into its corresponding lines
         and add each story-abstract pairs
-        :param common_dict If True, use a common dictionary for inp and output
+        N.B. change: dropping `common_dict=True` as I am assuming I will always use a common
+        dictionary for reasoning and QA. Separate dictionary makes sense for translation which
+        I am not working at the moment.
         :return:
         """
 
-        inp_words = Counter()
-        outp_words = Counter()
+        words = Counter()
         max_sent_length = 0
+        if self.data_has_target:
+            # assign target ids
+            self.assign_target_id(list(data['target']))
+
         for i,row in data.iterrows():
+            dataRow = DataRow()
+            dataRow.id = row['id']
             story_sents = sent_tokenize(row['story'])
-            summary_sents = sent_tokenize(row['summary'])
             story_sents = [self.tokenize(sent) for sent in story_sents]
-            summary_sents = [self.tokenize(sent) for sent in summary_sents]
+            words.update([word for sent in story_sents for word in sent])
+            dataRow.story_sents = story_sents
+            dataRow.story = [word for sent in story_sents for word in sent] # flatten
+            if self.data_has_text_target:
+                # preprocess text_target
+                text_target = self.tokenize(row['text_target'])
+                dataRow.text_target = text_target
+                words.update([word for word in text_target])
+            if self.data_has_text_query:
+                # preprocess text_query
+                text_query = self.tokenize(row['text_query'])
+                dataRow.text_query = text_query
+                words.update([word for word in text_query])
             max_sl = max([len(s) for s in story_sents])
             if max_sl > max_sent_length:
                 max_sent_length = max_sl
-            # add in the summaryPairs
-            summaryPair = Dict()
-            summaryPair.story_sents = story_sents
-            summaryPair.summary_sents = summary_sents
+            if self.data_has_query:
+                # replace query with entity
+                dataRow.query = make_tuple(row['query'])
+                dataRow.query = [self.entity_map[dataRow.id][tp] for tp in dataRow.query]
+            if self.data_has_target:
+                dataRow.target = self.target_id2word[row['target']]
             if mode == 'train':
-                self.summaryPairs[mode].append(summaryPair)
+                self.dataRows[mode][dataRow.id] = dataRow
             else:
-                if test_file not in self.summaryPairs[mode]:
-                    self.summaryPairs[mode][test_file] = []
-                self.summaryPairs[mode][test_file].append(summaryPair)
-            story_words = [word for sent in story_sents for word in sent]
-            summary_words = [word for sent in summary_sents for word in sent]
-            inp_words.update(story_words)
-            outp_words.update(summary_words)
+                if test_file not in self.dataRows[mode]:
+                    self.dataRows[mode][test_file] = {}
+                self.dataRows[mode][test_file][dataRow.id] = dataRow
 
         # only assign word-ids in train data
         if mode == 'train' and not self.load_dictionary:
-            if common_dict:
-                words = inp_words + outp_words
-                self.word2id, self.id2word = self.assign_wordids(words)
-            else:
-                self.word2id['input'], self.id2word['input'] = self.assign_wordids(inp_words)
-                self.word2id['output'], self.id2word['output'] = self.assign_wordids(outp_words)
+            self.word2id, self.id2word = self.assign_wordids(words)
 
         # get adj graph
         if mode == 'train':
-            for sP in self.summaryPairs[mode]:
-                sP.story_graph = self.prepare_ent_graph(sP.story_sents)
-            logging.info("Processed {} stories in mode {}".format(len(self.summaryPairs[mode]), mode))
+            for dR in self.dataRows[mode]:
+                dR.story_graph = self.prepare_ent_graph(dR.story_sents)
+            logging.info("Processed {} stories in mode {}".format(len(self.dR[mode]), mode))
             self.max_sent_length = max_sent_length
         else:
-            for sP in self.summaryPairs[mode][test_file]:
-                sP.story_graph = self.prepare_ent_graph(sP.story_sents)
+            for dR in self.dataRows[mode][test_file]:
+                dR.story_graph = self.prepare_ent_graph(dR.story_sents)
             logging.info("Processed {} stories in mode {} and file: {}".format(
-                len(self.summaryPairs[mode][test_file]), mode, test_file))
+                len(self.dataRows[mode][test_file]), mode, test_file))
 
 
 
@@ -304,30 +367,38 @@ class DataUtility():
 
         logging.info("Created dictionary. Words : {}, Entities : {}".format(
             len(word2id), len(self.entity_ids)))
-        for word in RELATION_KEYWORDS:
-            if word not in self.target_word2id:
-                last_id = len(self.target_word2id)
-                self.target_word2id[word] = last_id
-        self.target_id2word = {v:k for k,v in self.target_word2id.items()}
-        logging.info("Target Entities : {}".format(len(self.target_word2id)))
         return word2id, id2word
+
+    def assign_target_id(self, targets):
+        """
+        Assign IDS to targets
+        :param targets:
+        :return:
+        """
+        for target in targets:
+            if target not in self.target_word2id:
+                last_id = len(self.target_word2id)
+            self.target_word2id[target] = last_id
+        self.target_id2word = {v: k for k, v in self.target_word2id.items()}
+        logging.info("Target Entities : {}".format(len(self.target_word2id)))
 
     def split_indices(self):
         """
-        Split indices into training and validation
+        Split training file indices into training and validation
         Now we use separate testing file
         :return:
         """
-        indices = range(len(self.summaryPairs['train']))
+        indices = range(len(self.dataRows['train']))
         mask_i = np.random.choice(indices, int(len(indices) * self.train_test_split), replace=False)
-        self.val_indices = [i for i in indices if i not in set(mask_i)]
-        self.train_indices = [i for i in indices if i in set(mask_i)]
+        self.val_indices = [self.dataRows['train'][i].id for i in indices if i not in set(mask_i)]
+        self.train_indices = [self.dataRows['train'][i].id for i in indices if i in set(mask_i)]
 
 
     def prepare_ent_graph(self, sents, max_nodes=0):
         """
-        Given a list of sentences, return an adjacency matrix between entitities
+        Given a list of sentences, return an adjacency matrix between entities
         Assumes entities have the format @ent{num}
+        We can use OpenIE in later editions to automatically detect entities
         :param sents: list(list(str))
         :param max_nodes: max number of nodes in the adjacency matrix, int
         :return: list(list(int))
@@ -356,42 +427,19 @@ class DataUtility():
                 indices = self.train_indices
             else:
                 indices = self.val_indices
-            summaryPairs = self._select(self.summaryPairs['train'], indices)
+            dataRows = self._select(self.dataRows['train'], indices)
         else:
-            summaryPairs = self.summaryPairs['test'][test_file]
+            dataRows = [v for k,v in self.dataRows['test'][test_file].items()]
 
-
-        inp_rows = []
-        outp_rows = []
-        inp_row_graphs = []
-        for summaryPair in summaryPairs:
-            inp_row = summaryPair.story_sents
-            if not self.sentence_mode:
-                inp_row = [word for sent in inp_row for word in sent]
-            outp_row = summaryPair.summary_sents
-            if self.single_abs_line:
-                inp_rows.append(inp_row)
-                inp_row_graphs.append(summaryPair.story_graph)
-                batch_outp_rows = []
-                for outpr in outp_row:
-                    batch_outp_rows.append(outpr)
-                outp_rows.append(batch_outp_rows)
-
-            else:
-                inp_rows.append(inp_row)
-                outp_rows.append([word for sent in outp_row for word in sent])
-                inp_row_graphs.append(summaryPair.story_graph)
-
-        # check
-        assert len(inp_rows) == len(outp_rows) == len(inp_row_graphs)
-        logging.info("Total rows : {}, batches : {}".format(len(inp_rows), len(inp_rows) // self.batch_size))
+        logging.info("Total rows : {}, batches : {}"
+                     .format(len(dataRows),
+                             len(dataRows) // self.batch_size))
 
         collate_FN = collate_fn
         if self.sentence_mode:
             collate_FN = sent_collate_fn
 
-        return data.DataLoader(SequenceDataLoader(inp_rows, outp_rows, self,
-                                                  inp_graphs=inp_row_graphs),
+        return data.DataLoader(SequenceDataLoader(dataRows, self),
                                batch_size=self.batch_size,
                                num_workers=self.num_workers,
                                collate_fn=collate_FN)
@@ -427,7 +475,7 @@ class DataUtility():
 
     def _select(self, array, indices):
         """
-        Select based on indices
+        Select based on ids
         :param array:
         :param indices:
         :return:
@@ -459,11 +507,13 @@ class SequenceDataLoader(data.Dataset):
     Separate dataloader instance
     """
 
-    def __init__(self, inp_text, outp_text, data, inp_graphs=None):
-        self.inp_text = inp_text
-        self.outp_text = outp_text
+    def __init__(self, dataRows, data):
+        """
+        :param dataRows: training / validation / test data rows
+        :param data: pointer to DataUtility class
+        """
+        self.dataRows = dataRows
         self.data = data
-        self.inp_graphs = inp_graphs
 
     def __getitem__(self, index):
         """
@@ -471,18 +521,17 @@ class SequenceDataLoader(data.Dataset):
         :param item:
         :return:
         """
-        inp_row = self.inp_text[index]
-        orig_inp = self.inp_text[index]
-        inp_row_graph = self.inp_graphs[index]
+        orig_inp = self.dataRows[index].story
+        inp_row_graph = self.dataRows[index].story_graph
         inp_row_pos = []
         if self.data.sentence_mode:
-            sent_lengths = [len(sent) for sent in inp_row]
-            inp_row = [[self.data.get_token(word) for word in sent] for sent in inp_row]
+            sent_lengths = [len(sent) for sent in self.dataRows[index].story_sents]
+            inp_row = [[self.data.get_token(word) for word in sent] for sent in self.dataRows[index].story_sents]
             inp_ents = [[id for id in sent if id in self.data.entity_ids] for sent in inp_row]
             inp_row_pos = [[widx + 1 for widx, word in enumerate(sent)] for sent in inp_row]
         else:
-            sent_lengths = [len(inp_row)]
-            inp_row = [self.data.get_token(word) for word in inp_row]
+            sent_lengths = [len(self.dataRows[index].story)]
+            inp_row = [self.data.get_token(word) for word in self.dataRows[index].story]
             inp_ents = list(set([id for id in inp_row if id in self.data.entity_ids]))
 
         ## calculate one-hot mask for entities which are used in this row
@@ -505,7 +554,6 @@ class SequenceDataLoader(data.Dataset):
                     for ent1, ent2 in it.combinations(inp_ent, 2):
                         # check if two same entities are not appearing
                         if ent1 == ent2:
-                            print("shit")
                             raise NotImplementedError("For now two same entities cannot appear in the same sentence")
                         assert ent1 != ent2
                         # remember we are shifting one bit here
@@ -515,33 +563,16 @@ class SequenceDataLoader(data.Dataset):
             sentence_pointer = np.ones((len(self.data.entity_ids), len(self.data.entity_ids), 1))
 
 
-        # calculate the outputs
-        outp_row = []
-        outp_ents = []
-        ent_mask = []
-        for row in self.outp_text[index]:
-            current_outp_row = [START_TOKEN] + row + [END_TOKEN]
-            current_row_ids = [self.data.get_token(word) for word in current_outp_row]
-            current_ents = [id for id in current_row_ids if id in self.data.entity_ids]
-            if self.data.only_relation:
-                # if only relation, then change the output to [START] + [Relation]
-                current_outpr = list(set(row).intersection(RELATION_KEYWORDS))
-                current_outp_row = [START_TOKEN] + current_outpr #+ [END_TOKEN]
-            current_ent_mask = [[1 if w == ent else 0 for w in self.__flatten__(inp_row)] for ent in current_ents]
-            current_outp_row = [self.data.get_token(word, target=True) for word in current_outp_row]
-            # mask over input sentence
-            outp_row.append(current_outp_row)
-            if len(current_ents) < 2:
-                print(row)
-                print(index)
-                print(current_ents)
-                print(current_row_ids)
-                print(self.data.entity_ids)
-                raise AssertionError("a sentence must contain two entities")
-            outp_ents.append(current_ents)
-            ent_mask.append(current_ent_mask)
+        # calculate the output
+        target = [self.dataRows[index].target]
+        query = [self.data.get_token(tp) for tp in self.dataRows[index].query] # tuple
+        # one hot integer mask over the input text which specifies the query strings
+        query_mask = [[1 if w == ent else 0 for w in self.__flatten__(inp_row)] for ent in query]
+        text_query = [self.data.get_token(tp) for tp in self.dataRows[index].text_query]
+        text_target = [self.data.get_token(tp) for tp in self.dataRows[index].text_target]
+        text_target = [START_TOKEN] + text_target + [END_TOKEN]
 
-        return inp_row, outp_row, inp_ents, outp_ents, ent_mask, inp_row_graph, \
+        return inp_row, inp_ents, query, text_query, query_mask, target, text_target, inp_row_graph, \
                sent_lengths, inp_ent_mask, sentence_pointer, orig_inp, inp_row_pos
 
     def __flatten__(self, arr):
@@ -583,27 +614,26 @@ def collate_fn(data):
     """
     ## sort dataset by inp sentences
     data.sort(key=lambda x: len(x[0]), reverse=True)
-    inp_data, outp_data, inp_ents, outp_ents, ent_mask, inp_graphs, sent_lengths, inp_ent_mask, *_ = zip(*data)
+    inp_data, inp_ents, query, text_query, query_mask, target, text_target, inp_graphs, sent_lengths, inp_ent_mask, *_ = zip(*data)
     inp_data, inp_lengths = simple_merge(inp_data)
     # outp_data, outp_lengths = simple_merge(outp_data)
-    outp_data, outp_lengths = nested_merge(outp_data)
+    text_target, text_target_lengths = nested_merge(text_target)
 
     # outp_data = outp_data.view(-1, outp_data.shape[2]) no need to reshape now, will do it later
-    outp_ents = torch.LongTensor(outp_ents)
-    # outp_ents = outp_ents.view(-1, outp_ents.shape[2])
-    ent_mask = pad_nested_ents(ent_mask, inp_lengths)
+    query = torch.LongTensor(query)
+    query_mask = pad_nested_ents(query_mask, inp_lengths)
 
     # prepare batch
     batch = Batch(
         inp=inp_data,
         inp_lengths=inp_lengths,
         sent_lengths=sent_lengths,
-        outp=outp_data,
-        outp_lengths=outp_lengths,
+        text_target=text_target,
+        text_target_lengths=text_target_lengths,
         inp_ents=inp_ents,
-        outp_ents=outp_ents,
+        query=query,
+        query_mask=query_mask,
         inp_graphs=torch.LongTensor(inp_graphs),
-        ent_mask= ent_mask,
         inp_ent_mask = torch.LongTensor(inp_ent_mask)
     )
 
@@ -629,7 +659,7 @@ def sent_collate_fn(data):
 
     ## sort dataset by number of sentences
     data.sort(key=lambda x: len(x[0]), reverse=True)
-    inp_data, outp_data, inp_ents, outp_ents, ent_mask, inp_graphs\
+    inp_data, inp_ents, query, text_query, query_mask, target, text_target, inp_graphs\
         , sent_lengths, inp_ent_mask, sentence_pointer\
         , orig_inp, inp_row_pos = zip(*data)
 
@@ -644,21 +674,21 @@ def sent_collate_fn(data):
 
     sent_lengths = pad_sent_lengths(sent_lengths)
 
-    outp_data, outp_lengths = nested_merge(outp_data)
-    outp_ents = torch.LongTensor(outp_ents)
-    ent_mask = pad_nested_ents(ent_mask, inp_lengths)
+    text_target, text_target_lengths = nested_merge(text_target)
+    query = torch.LongTensor(query)
+    query_mask = pad_nested_ents(query_mask, inp_lengths)
 
     # prepare batch
     batch = Batch(
         inp=inp_data,
         inp_lengths=inp_lengths,
         sent_lengths=sent_lengths,
-        outp=outp_data,
-        outp_lengths=outp_lengths,
+        text_target=text_target,
+        text_target_lengths=text_target_lengths,
         inp_ents=inp_ents,
-        outp_ents=outp_ents,
+        query=query,
+        query_mask=query_mask,
         inp_graphs=torch.LongTensor(inp_graphs),
-        ent_mask=ent_mask,
         sentence_pointer=sentence_pointer,
         orig_inp = orig_inp,
         inp_ent_mask = torch.LongTensor(inp_ent_mask),
