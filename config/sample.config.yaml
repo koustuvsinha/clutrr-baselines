@@ -7,17 +7,16 @@ general:
   exp_name: default
   description: Sample code. Does not train any model
   commit_id: ''
-  mode: sample
+  mode: train # can be train or infer
   only_infer: False # set this to true if we want to run only the inference on test data
-  comet:
-    api_key: # put the comet api key here
-    project_name: # comet project name
-    workspace: # comet workspace
 dataset:
-  base_path: data
+  base_path: data_v3
+  train_file: genv3_m3
+  test_files: [genv3_m3]
+  save_path: dtp.pkl
+  load_save_path: false
+  load_dictionary: false
   filename: output.csv
-  save_path: data_saved.pkl
-  load_save_path: true
   name: family
   is_preprocessed: true
   train_test_split: 0.8
@@ -26,7 +25,6 @@ dataset:
   tokenization: word
   common_dict: true
   sentence_mode: false #sentence mode processes each input story sentence separately. For GNN, this helps to maintaining a node pair -> sentence mapping
-  only_relation: false  # set this value to true when testing only relations as single words. Only works in toy data.
 model:
   name: baseline1
   batch_size: 100
@@ -40,7 +38,6 @@ model:
   loss_criteria: CE
   loss_type: classify   # set this to classify when performing a classification task, else `seq2seq`
   query_entities: 2
-  only_relation: false  # set this to true when dataset.only_relation is true
   early_stopping:
     patience: 3
     metric_to_track: loss
@@ -62,6 +59,7 @@ model:
     nlayers: 2
     bidirectional: true
     dropout: 0
+    pooling: maxpool # can be attention or maxpool
     tmp_name: codes.models.gnn.encoder.GraphEncoder
     invalidate_embeddings: True
   decoder:
@@ -86,23 +84,30 @@ model:
     message_dim: 100
     edge_dim: 100
     pos_rep: random # if random, then use a frozen embedding layer to denote the node position. if one-hot, then use just a one-hot embedding
-    pos_dim: 50 # if above is random, then use this flag
+    pos_dim: 5 # if above is random, then use this flag
     feature_dim: 10 # learns graph features
     num_reads: 1
     num_message_rounds: 2
     message_function:
       num_layers: 2
+      use_attention: True
+      fn_type: lstm # either lstm or mlp
+      use_layer_norm: True
     readout_function:
       num_layers: 2
+      read_mode: average # can be "only_query", "average" or "attention". When only_query, provide the query ids only. If average, provide query ids along with averaged last state of the graph. If attention, then query along with attentive readout of the graph
     update_function:
       num_layers: 2
-    edge_embedding: lstm # if edge_embedding is lstm, then use an lstm to extract the relation, else average word embedding
+      fn_type: lstm # either lstm or mlp
+      use_layer_norm: True
+    edge_embedding: word # if edge_embedding is lstm, then use an lstm to extract the relation, else average word embedding
+    dropout: 0.0
 log:
   file_path: ''
-  mongo_host: 127.0.0.1
-  mongo_port: '8092'
-  mongo_db: graphsum
   logs_per_epoch: 50
-  use_mongo: false
+  comet:
+    api_key: # put the comet api key here
+    project_name: # comet project name
+    workspace: # comet workspace
 plot:
   base_path: ''

@@ -22,9 +22,6 @@ logging.basicConfig(
 )
 
 base_path = os.path.dirname(os.path.realpath(__file__)).split('codes')[0]
-rel_store = json.load(open(os.path.join(base_path, 'codes', 'toy','relations_store.json'),'r'))
-#rel_store = json.load(open(os.path.join(base_path, 'codes', 'logic', 'mensus','store.json'),'r'))
-RELATION_KEYWORDS = rel_store['_relation_keywords']
 UNK_WORD = '<unk>'
 PAD_TOKEN = '<pad>'
 START_TOKEN = '<s>'
@@ -73,7 +70,6 @@ class DataUtility():
         self.dim = config.model.graph.edge_dim
         self.sentence_mode = config.dataset.sentence_mode
         self.single_abs_line = config.dataset.single_abs_line
-        self.only_relation = config.dataset.only_relation
 
         self.word2id = {}
         self.id2word = {}
@@ -121,7 +117,7 @@ class DataUtility():
         else:
             self.train_file = train_file
         train_data = pd.read_csv(self.train_file, comment='#')
-        self._check_data(train_data)
+        train_data = self._check_data(train_data)
         logging.info("Start preprocessing data")
         if load_dictionary:
             dictionary_file = os.path.join(base_path, 'dict.json')
@@ -172,7 +168,7 @@ class DataUtility():
         - target : classification target            : required if config.model.loss_type set to classify
         - text_target : seq2seq target              : required if config.model.loss_type set to seq2seq
         :param data:
-        :return:
+        :return: data
         """
         assert "id" in list(data.columns)
         assert "story" in list(data.columns)
@@ -182,10 +178,15 @@ class DataUtility():
         if self.config.model.loss_type == 'seq2seq':
             assert "text_target" in list(data.columns)
             self.data_has_text_target = True
-        if "query" in list(data.columns):
+        if "query" in list(data.columns) and len(data['query'].value_counts()) > 0:
             self.data_has_query = True
-        if "text_query" in list(data.columns):
+        else:
+            data['query'] = ''
+        if "text_query" in list(data.columns) and len(data['text_query'].value_counts()) > 0:
             self.data_has_text_query = True
+        else:
+            data['text_query'] = ''
+        return data
 
     def process_entities(self, data, placeholder='[]'):
         """
@@ -264,11 +265,9 @@ class DataUtility():
             if max_sl > max_sent_length:
                 max_sent_length = max_sl
             if self.data_has_query:
-                # replace query with entity
                 dataRow.query = make_tuple(row['query'])
-                dataRow.query = [self.entity_map[dataRow.id][tp] for tp in dataRow.query]
             if self.data_has_target:
-                dataRow.target = self.target_id2word[row['target']]
+                dataRow.target = self.target_word2id[row['target']]
             if mode == 'train':
                 self.dataRows[mode][dataRow.id] = dataRow
             else:
@@ -282,12 +281,13 @@ class DataUtility():
 
         # get adj graph
         if mode == 'train':
-            for dR in self.dataRows[mode]:
+            for key, dR in self.dataRows[mode].items():
                 dR.story_graph = self.prepare_ent_graph(dR.story_sents)
-            logging.info("Processed {} stories in mode {}".format(len(self.dR[mode]), mode))
+            logging.info("Processed {} stories in mode {}".format(len(self.dataRows[mode]),
+                                                                  mode))
             self.max_sent_length = max_sent_length
         else:
-            for dR in self.dataRows[mode][test_file]:
+            for key, dR in self.dataRows[mode][test_file].items():
                 dR.story_graph = self.prepare_ent_graph(dR.story_sents)
             logging.info("Processed {} stories in mode {} and file: {}".format(
                 len(self.dataRows[mode][test_file]), mode, test_file))
@@ -375,10 +375,10 @@ class DataUtility():
         :param targets:
         :return:
         """
-        for target in targets:
+        for target in set(targets):
             if target not in self.target_word2id:
                 last_id = len(self.target_word2id)
-            self.target_word2id[target] = last_id
+                self.target_word2id[target] = last_id
         self.target_id2word = {v: k for k, v in self.target_word2id.items()}
         logging.info("Target Entities : {}".format(len(self.target_word2id)))
 
@@ -388,7 +388,7 @@ class DataUtility():
         Now we use separate testing file
         :return:
         """
-        indices = range(len(self.dataRows['train']))
+        indices = list(self.dataRows['train'].keys())
         mask_i = np.random.choice(indices, int(len(indices) * self.train_test_split), replace=False)
         self.val_indices = [self.dataRows['train'][i].id for i in indices if i not in set(mask_i)]
         self.train_indices = [self.dataRows['train'][i].id for i in indices if i in set(mask_i)]
@@ -799,7 +799,7 @@ if __name__ == '__main__':
     # experiments
     # Take the last training file which has the longest path and make a dictionary
     parent_dir = os.path.abspath(os.pardir).split('/codes')[0]
-    config = get_config(config_id='graph_rel')
+    config = get_config(config_id='lstm')
     generate_dictionary(config)
 
 

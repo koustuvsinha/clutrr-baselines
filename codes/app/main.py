@@ -25,9 +25,9 @@ if __name__ == '__main__':
     config_id = argument_parser()
     print(config_id)
     config = get_config(config_id=config_id)
-    ex = Experiment(api_key=config.general.comet.api_key,
-                    workspace=config.general.comet.workspace,
-                    project_name=config.general.comet.project_name)
+    ex = Experiment(api_key=config.log.comet.api_key,
+                    workspace=config.log.comet.workspace,
+                    project_name=config.log.comet.project_name)
     name = 'exp_{}'.format(config_id)
     config.general.exp_name = name
     ex.log_parameters(config)

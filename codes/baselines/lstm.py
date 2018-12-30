@@ -49,7 +49,8 @@ class SimpleDecoder(Net):
         else:
             self.embedding = shared_embeddings
 
-        if model_config.only_relation:
+        if model_config.loss_type == 'classify':
+            # set simple MLP classifier
             base_enc_dim = model_config.embedding.dim
             if model_config.encoder.bidirectional:
                 base_enc_dim *=2
@@ -60,6 +61,7 @@ class SimpleDecoder(Net):
             output_dim = model_config.vocab_size
             self.decoder2vocab = self.get_mlp(input_dim, output_dim)
         else:
+            # set LSTM decoder
             inp_dim = model_config.embedding.dim
             if model_config.encoder.bidirectional:
                 inp_dim *= 2
@@ -132,7 +134,7 @@ class SimpleDecoder(Net):
         # LETS
         check_id_emb(decoder_inp, self.model_config.vocab_size)
         decoder_inp = self.embedding(decoder_inp)
-        if self.model_config.only_relation:
+        if self.model_config.loss_type == 'classify':
             mlp_inp = torch.cat([query_rep.squeeze(1), encoder_outputs[:, -1, :]], -1)
         else:
             lstm_inp = torch.cat([decoder_inp, query_rep], -1)

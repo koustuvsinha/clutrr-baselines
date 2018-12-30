@@ -27,7 +27,7 @@ class GraphLSTMDecoder(Net):
         #    model_config.vocab_size
         #)
 
-        if model_config.only_relation:
+        if model_config.loss_type == 'classify':
             query_rep = model_config.graph.edge_dim + model_config.graph.pos_dim + model_config.graph.feature_dim
             query_rep *= 2
 
@@ -117,7 +117,7 @@ class GraphLSTMDecoder(Net):
         check_id_emb(decoder_inp, self.model_config.vocab_size)
         decoder_inp = self.embedding(decoder_inp)
 
-        if self.model_config.only_relation:
+        if self.model_config.loss_type == 'classify':
             if self.model_config.graph.readout_function.read_mode == 'average':
                 graph_state = self.avg_readout(encoder_outputs, ex_mask)
             elif self.model_config.graph.readout_function.read_mode == 'attention':
