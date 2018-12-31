@@ -30,6 +30,7 @@ _Generated folders_
 - `Trainer` supports two modes of training : `classify` for n-way classification tasks, and `seq2seq` for language generation tasks.
 - All metric calculation and tracking is done in `codes.metric` package. This should also incorporate
 early stopping criterias.
+- To specify which encoder and decoder to run for the current experiment, modify `config.model.encoder.name` and  `config.model.decoder.name` for dynamic loading.
 
 ## Config Management
 
@@ -52,6 +53,16 @@ the `exp_id` should be the hex.
 - To run an experiment, first make sure that the codebase is in the Pythonpath:
 `export PYTHONPATH="${PYTHONPATH}:/home/.../experiment_base`
 - Then, cd into `codes/app` and run `python main.py --config_id <experiment_name>`
+
+## Dependencies
+
+- Pytorch, 1.0
+- Comet.ml
+- Addict
+- NLTK
+- Pandas
+- Pyyaml
+- tqdm
 
 ## Acknowledgement
 

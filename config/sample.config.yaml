@@ -53,7 +53,7 @@ model:
     scheduler_patience: 10
     l2_penalty: 0
   encoder:
-    name: codes.baselines.seq2seq.SimpleEncoder
+    name: codes.baselines.lstm.basic.SimpleEncoder
     hidden_dim: 100
     nlayers: 2
     bidirectional: true
@@ -62,7 +62,7 @@ model:
     tmp_name: codes.models.gnn.encoder.GraphEncoder
     invalidate_embeddings: True
   decoder:
-    name: codes.baselines.seq2seq.SimpleDecoder
+    name: codes.baselines.lstm.basic.SimpleDecoder
     hidden_dim: 200
     nlayers: 2
     bidirectional: false
