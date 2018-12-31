@@ -49,6 +49,11 @@ early stopping criterias.
 - Each experiment is _resumable_. The checkpoints are created in `model/` folder with the experiment name. To resume an experiment,
 put the argument `--exp_id` along with `--config_id` in `main.py`, where
 the `exp_id` should be the hex.
+- To run an experiment, first make sure that the codebase is in the Pythonpath:
+`export PYTHONPATH="${PYTHONPATH}:/home/.../experiment_base`
+- Then, cd into `codes/app` and run `python main.py --config_id <experiment_name>`
 
+## Acknowledgement
 
+Koustuv Sinha, Shagun Sodhani
 
