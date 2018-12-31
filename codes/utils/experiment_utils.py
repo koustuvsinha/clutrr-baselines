@@ -25,6 +25,8 @@ class Experiment:
         self.comet_exp = None
         parent_dir = os.path.abspath(os.pardir).split('/codes')[0]
         self.model_save_path = os.path.join(parent_dir, 'model')
+        if not os.path.exists(self.model_save_path):
+            os.makedirs(self.model_save_path)
 
     def save_checkpoint(self, is_best=False):
         """

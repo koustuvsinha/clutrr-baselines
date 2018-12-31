@@ -171,13 +171,17 @@ class DataUtility():
         :param data:
         :return: data
         """
+        # check for required stuff
         assert "id" in list(data.columns)
         assert "story" in list(data.columns)
         if self.config.model.loss_type == 'classify':
             assert "target" in list(data.columns)
-            self.data_has_target = True
         if self.config.model.loss_type == 'seq2seq':
             assert "text_target" in list(data.columns)
+        # turn on flag if present
+        if "target" in list(data.columns):
+            self.data_has_target = True
+        if "text_target" in list(data.columns):
             self.data_has_text_target = True
         if "query" in list(data.columns) and len(data['query'].value_counts()) > 0:
             self.data_has_query = True
@@ -575,9 +579,11 @@ class SequenceDataLoader(data.Dataset):
         query = [self.data.get_token(tp) for tp in self.dataRows[index].query] # tuple
         # one hot integer mask over the input text which specifies the query strings
         query_mask = [[1 if w == ent else 0 for w in self.__flatten__(inp_row)] for ent in query]
-        text_query = [self.data.get_token(tp) for tp in self.dataRows[index].text_query]
-        text_target = [self.data.get_token(tp) for tp in self.dataRows[index].text_target]
-        text_target = [START_TOKEN] + text_target + [END_TOKEN]
+        # TODO: use query_text and query_text length and pass it back
+        # text_query = [self.data.get_token(tp) for tp in self.dataRows[index].text_query]
+        text_query = []
+        text_target = [START_TOKEN] + self.dataRows[index].text_target + [END_TOKEN]
+        text_target = [self.data.get_token(tp) for tp in text_target]
 
         return inp_row, inp_ents, query, text_query, query_mask, target, text_target, inp_row_graph, \
                sent_lengths, inp_ent_mask, sentence_pointer, orig_inp, inp_row_pos
@@ -589,7 +595,7 @@ class SequenceDataLoader(data.Dataset):
             return arr
 
     def __len__(self):
-        return len(self.inp_text)
+        return len(self.dataRows)
 
 
 ## Helper functions
@@ -624,17 +630,19 @@ def collate_fn(data):
     inp_data, inp_ents, query, text_query, query_mask, target, text_target, inp_graphs, sent_lengths, inp_ent_mask, *_ = zip(*data)
     inp_data, inp_lengths = simple_merge(inp_data)
     # outp_data, outp_lengths = simple_merge(outp_data)
-    text_target, text_target_lengths = nested_merge(text_target)
+    text_target, text_target_lengths = simple_merge(text_target)
 
     # outp_data = outp_data.view(-1, outp_data.shape[2]) no need to reshape now, will do it later
     query = torch.LongTensor(query)
-    query_mask = pad_nested_ents(query_mask, inp_lengths)
+    query_mask = pad_ents(query_mask, inp_lengths)
+    target = torch.LongTensor(target)
 
     # prepare batch
     batch = Batch(
         inp=inp_data,
         inp_lengths=inp_lengths,
         sent_lengths=sent_lengths,
+        target=target,
         text_target=text_target,
         text_target_lengths=text_target_lengths,
         inp_ents=inp_ents,

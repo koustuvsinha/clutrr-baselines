@@ -206,10 +206,9 @@ class Generator:
             inp = batch.inp.view(batch.batch_size, -1)
         else:
             inp = batch.inp
-        num_abs = batch.ent_mask.size(1)
-        inp = inp.unsqueeze(1).expand(-1,num_abs,-1).contiguous().view(batch.batch_size * num_abs, -1)
+        inp = inp.view(batch.batch_size, -1)
         batch.true_inp = self._convert_mat_to_text(inp)
-        batch.true_outp = self._convert_mat_to_text(batch.outp, target=True)
+        batch.true_outp = self._convert_mat_to_text(batch.target, target=True)
         batch.pred_outp = self._convert_mat_to_text(predictions, target=True)
         return batch
 

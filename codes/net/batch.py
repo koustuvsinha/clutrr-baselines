@@ -15,7 +15,7 @@ class Batch:
             text_target = None,         # target in text, (B x t)
             text_target_lengths = None, # target lengths, (B x 1)
             query = None,               # query relation pair, (B x 2)
-            query_mask = None,          # query mask over input, (B x s) / (B x s x w) in sentence mode
+            query_mask = None,          # query mask over input, (B x s x 2)
             query_text = None,          # query_text input, (B x q)
             query_text_lengths = None,  # query_text lengths, (B x 1)
             inp_ents = None,            # entities per story, (B x e)
@@ -36,7 +36,7 @@ class Batch:
         :param text_target:             target in text, (B x t)
         :param text_target_lengths:     target lengths, (B x 1)
         :param query:                   query relation pair, (B x 2)
-        :param query_mask:              query mask over input, (B x s) / (B x s x w) in sentence mode
+        :param query_mask:              query mask over input, (B x s x 2)
         :param query_text:              query_text input, (B x q)
         :param query_text_lengths:      query_text lengths, (B x 1)
         :param inp_ents:                entities per story, (B x e)

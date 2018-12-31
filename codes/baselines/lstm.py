@@ -58,7 +58,7 @@ class SimpleDecoder(Net):
 
 
             input_dim = query_rep + base_enc_dim
-            output_dim = model_config.vocab_size
+            output_dim = model_config.target_size
             self.decoder2vocab = self.get_mlp(input_dim, output_dim)
         else:
             # set LSTM decoder
@@ -102,18 +102,15 @@ class SimpleDecoder(Net):
         :param outp_ents: B x num_ents (usually 2)
         :return:
         """
-        encoder_outputs, ent_mask = batch.encoder_outputs, batch.ent_mask
+        encoder_outputs, query_mask = batch.encoder_outputs, batch.query_mask
         # expand
-        num_abs = ent_mask.size(1)
-        num_ents = ent_mask.size(2)
-        seq_len = ent_mask.size(3)
-        encoder_outputs = encoder_outputs.unsqueeze(1) # B x 1 x seq_len x dim
-        encoder_outputs = encoder_outputs.expand(-1, num_abs, -1, -1).contiguous() # B x num_abs x seq_len x dim
-        encoder_outputs = encoder_outputs.view(-1, seq_len, encoder_outputs.size(3)) # (B x num_abs) x seq_len x dim
-        ent_mask = ent_mask.view(-1, num_ents, seq_len) # (B x num_abs) x num_ents x seq_len
+        num_ents = query_mask.size(2)
+        seq_len = query_mask.size(1)
+        # encoder_outputs # B x seq_len x dim
+        query_mask = query_mask.transpose(1,2) # B x num_ents x seq_len
 
-        query_rep = torch.bmm(ent_mask.float(), encoder_outputs) # (B x num_abs) x num_ents x dim
-        query_rep = query_rep.transpose(1,2) # (B x num_abs) x dim x num_ents
+        query_rep = torch.bmm(query_mask.float(), encoder_outputs) # B x num_ents x dim
+        query_rep = query_rep.transpose(1,2) # B x dim x num_ents
         hidden_size = self.model_config.encoder.hidden_dim
         ents = query_rep.size(-1)
         query_reps = []
@@ -123,20 +120,16 @@ class SimpleDecoder(Net):
         return query_rep
 
     def forward(self, batch, step_batch):
-        decoder_inp = step_batch.decoder_inp
         hidden_rep = step_batch.hidden_rep
         query_rep = step_batch.query_rep
         encoder_outputs = batch.encoder_outputs
         _, seq_len, dim = encoder_outputs.size()
-        encoder_outputs = encoder_outputs.unsqueeze(1).expand(-1,
-            batch.ent_mask.size(1), -1, -1).contiguous().view(-1,seq_len,dim)
-        encoder_length = batch.inp_lengths
-        # LETS
-        check_id_emb(decoder_inp, self.model_config.vocab_size)
-        decoder_inp = self.embedding(decoder_inp)
         if self.model_config.loss_type == 'classify':
             mlp_inp = torch.cat([query_rep.squeeze(1), encoder_outputs[:, -1, :]], -1)
         else:
+            decoder_inp = step_batch.decoder_inp
+            check_id_emb(decoder_inp, self.model_config.vocab_size)
+            decoder_inp = self.embedding(decoder_inp)
             lstm_inp = torch.cat([decoder_inp, query_rep], -1)
             mlp_inp, hidden_rep = self.lstm(lstm_inp, hidden_rep)
 

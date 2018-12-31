@@ -1,8 +1,3 @@
-import random
-
-import numpy as np
-import torch
-
 from comet_ml import Experiment
 from codes.experiment.experiment import run_experiment
 from codes.utils.config import get_config
@@ -27,7 +22,8 @@ if __name__ == '__main__':
     config = get_config(config_id=config_id)
     ex = Experiment(api_key=config.log.comet.api_key,
                     workspace=config.log.comet.workspace,
-                    project_name=config.log.comet.project_name)
+                    project_name=config.log.comet.project_name,
+                    disabled=config.log.comet.disabled)
     name = 'exp_{}'.format(config_id)
     config.general.exp_name = name
     ex.log_parameters(config)

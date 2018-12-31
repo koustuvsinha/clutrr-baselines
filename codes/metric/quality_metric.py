@@ -4,9 +4,6 @@ import os
 import json
 
 base_path = os.path.dirname(os.path.realpath(__file__)).split('codes')[0]
-rel_store = json.load(open(os.path.join(base_path, 'codes', 'toy','relations_store.json'),'r'))
-#rel_store = json.load(open(os.path.join(base_path, 'codes', 'logic','mensus','store.json'),'r'))
-RELATION_KEYWORDS = rel_store['_relation_keywords']
 
 class QualityMetric:
     def __init__(self, data):
@@ -41,8 +38,8 @@ class QualityMetric:
         """
         corr = []
         for idx, pred in enumerate(prediction):
-            hyp_relation = set(RELATION_KEYWORDS).intersection(set(hypothesis[idx]))
-            pred_relation = set(RELATION_KEYWORDS).intersection(set(pred))
+            hyp_relation = set(hypothesis[idx])
+            pred_relation = set(pred)
             corr_rel = hyp_relation.intersection(pred_relation)
             corr.append(len(corr_rel)/ len(hyp_relation))
         return np.mean(corr)

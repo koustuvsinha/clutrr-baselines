@@ -8,7 +8,6 @@ general:
   description: Sample code. Does not train any model
   commit_id: ''
   mode: train # can be train or infer
-  only_infer: False # set this to true if we want to run only the inference on test data
 dataset:
   base_path: data_v3
   train_file: genv3_m3
@@ -109,5 +108,6 @@ log:
     api_key: # put the comet api key here
     project_name: # comet project name
     workspace: # comet workspace
+    disabled: # disable when debugging
 plot:
   base_path: ''

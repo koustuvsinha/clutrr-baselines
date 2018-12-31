@@ -68,7 +68,7 @@ class Trainer:
         :param mode:
         :return:
         """
-        batch_size  = batch.outp_ents.size()[0]
+        batch_size  = batch.batch_size
         loss = 0
         if self.model_config.encoder.invalidate_embeddings:
             # invalidate the entity embeddings
@@ -124,8 +124,13 @@ class Trainer:
             step_batch.hidden_rep = hidden_rep
             step_batch.query_rep = query_rep
             logits, attn, hidden_rep = self.decoder_model(batch, step_batch)
-            loss = self.criteria(logits.squeeze(1), batch.outp)
-
+            if logits.dim() > 2:
+                logits = logits.squeeze(1)
+            loss = self.criteria(logits, batch.target.squeeze(1))
+            # generate prediction
+            topv, topi = logits.data.topk(1)
+            next_words = topi.squeeze(1)
+            decoder_outp = next_words
         else:
             raise NotImplementedError("Value in config.model.loss_type not implemented.")
 

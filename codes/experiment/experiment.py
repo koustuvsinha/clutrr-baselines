@@ -87,9 +87,12 @@ def run_experiment(config, exp):
     experiment.iteration_index.train = 0
     experiment.iteration_index.val = 0
     experiment.iteration_index.test = 0
-    experiment.comet_exp = exp
+    experiment.comet_ml = exp
 
-    _run_one_epoch_all_modes(experiment, only_infer=config.general.only_infer)
+    if config.general.mode == 'train':
+        _run_epochs(experiment)
+    else:
+        _run_one_epoch_all_modes(experiment, only_infer=True)
 
 
 def _run_epochs(experiment):
