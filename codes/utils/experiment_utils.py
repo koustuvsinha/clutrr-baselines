@@ -34,14 +34,17 @@ class Experiment:
         :return:
         """
         model_pre = self.config.general.id
+        experiment_id = self.comet_ml.id
         filename = os.path.join(self.model_save_path,
-                         '{}_checkpoint.pt'.format(model_pre))
+                         '{}_{}_checkpoint.pt'.format(model_pre, experiment_id))
         best_filename = os.path.join(self.model_save_path,
-                         '{}_best.pt'.format(model_pre))
+                         '{}_{}_best.pt'.format(model_pre, experiment_id))
         # save the model
         torch.save({
-            'epoch': self.epoch_index,
+            'epoch_index': self.epoch_index,
+            'iteration_index': self.iteration_index,
             'config': self.config,
+            'experiment_id': experiment_id,
             'model.encoder': self.model.encoder.state_dict(),
             'model.decoder': self.model.decoder.state_dict(),
             'optimizer': [opt.state_dict() for opt in self.optimizers]
@@ -50,9 +53,9 @@ class Experiment:
         if is_best:
             shutil.copyfile(filename, best_filename)
 
-    def load_checkpoint(self):
+    def load_checkpoint(self, exp_id):
         model_pre = self.config.general.id
-        checkpoint_name = '{}_checkpoint.pt'.format(model_pre)
+        checkpoint_name = '{}_{}_checkpoint.pt'.format(model_pre, exp_id)
         checkpoint_path = os.path.join(self.model_save_path,
                                        checkpoint_name)
         if os.path.isfile(checkpoint_path):
@@ -62,6 +65,11 @@ class Experiment:
             self.model.decoder.load_state_dict(checkpoint['model.decoder'])
             for idx, opt in enumerate(checkpoint['optimizer']):
                 self.optimizers[idx].load_state_dict(opt)
+            self.epoch_index = checkpoint['epoch_index']
+            self.iteration_index = checkpoint['iteration_index']
+            self.config = checkpoint['config']
+        else:
+            raise FileNotFoundError("Checkpoint not found")
 
 
 

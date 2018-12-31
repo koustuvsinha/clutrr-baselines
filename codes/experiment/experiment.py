@@ -23,7 +23,14 @@ logging.basicConfig(
 
 
 
-def run_experiment(config, exp):
+def run_experiment(config, exp, resume=False):
+    """
+    Start or Resume an experiment
+    :param config:
+    :param exp:
+    :param resume:
+    :return:
+    """
     write_config_log(config)
     experiment = Experiment()
     parent_dir = os.path.abspath(os.pardir).split('/codes')[0]
@@ -31,7 +38,7 @@ def run_experiment(config, exp):
     generate_dictionary(config)
     data_util = DataUtility(config)
     base_path = os.path.join(parent_dir, config.dataset.base_path)
-    if config.dataset.load_save_path or config.general.mode == 'infer':
+    if config.dataset.load_save_path or config.general.mode == 'infer' or resume:
         data_util.load(os.path.join(parent_dir, config.dataset.base_path, config.dataset.save_path))
     else:
         data_util.process_data(base_path,
@@ -73,20 +80,23 @@ def run_experiment(config, exp):
         max_entity_id=data_util.max_entity_id)
 
     experiment.optimizers, experiment.schedulers = experiment.trainer.get_optimizers()
-    if config.model.should_load_model or config.general.mode == 'infer':
+    if resume or config.general.mode == 'infer':
+        # resume an old experiment
         logging.info("Loading model parameters")
-        experiment.load_checkpoint()
+        experiment.load_checkpoint(exp.id)
+    # set device
     experiment.device = device
     experiment.validation_metrics = get_metric_dict(time_span=10)
     experiment.quality_metrics = QualityMetric(data=data_util)
     experiment.metric_to_perform_early_stopping = config.model.early_stopping.metric_to_track
     experiment.generator = Generator(experiment.data_util, experiment.model,
                                      config, trainer=experiment.trainer)
-    experiment.epoch_index = 0
-    experiment.iteration_index = Dict()
-    experiment.iteration_index.train = 0
-    experiment.iteration_index.val = 0
-    experiment.iteration_index.test = 0
+    if not resume:
+        experiment.epoch_index = 0
+        experiment.iteration_index = Dict()
+        experiment.iteration_index.train = 0
+        experiment.iteration_index.val = 0
+        experiment.iteration_index.test = 0
     experiment.comet_ml = exp
 
     if config.general.mode == 'train':
@@ -102,11 +112,11 @@ def _run_epochs(experiment):
     for key in validation_metrics_dict:
         validation_metrics_dict[key].reset()
     test_acc_per_epoch = []
-    while experiment.epoch_index < config.model.num_epochs:
+    while experiment.epoch_index <= config.model.num_epochs:
+        experiment.epoch_index += 1
         logging.info("Epoch {}".format(experiment.epoch_index))
         test_accs = _run_one_epoch_all_modes(experiment)
         test_acc_per_epoch.append(test_accs)
-        experiment.epoch_index += 1
         for scheduler in experiment.schedulers:
             if config.model.scheduler_type == "exp":
                 scheduler.step()
