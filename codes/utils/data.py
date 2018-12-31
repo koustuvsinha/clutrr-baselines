@@ -105,6 +105,7 @@ class DataUtility():
         self.data_has_text_query = False
         self.data_has_target = False
         self.data_has_text_target = False
+        self.preprocessed = set() # set of puzzle ids which has been preprocessed
 
     def process_data(self, base_path, train_file, load_dictionary=True):
         """
@@ -274,23 +275,29 @@ class DataUtility():
                 if test_file not in self.dataRows[mode]:
                     self.dataRows[mode][test_file] = {}
                 self.dataRows[mode][test_file][dataRow.id] = dataRow
+            self.preprocessed.add(dataRow.id)
 
         # only assign word-ids in train data
         if mode == 'train' and not self.load_dictionary:
             self.word2id, self.id2word = self.assign_wordids(words)
 
         # get adj graph
+        ct = 0
         if mode == 'train':
-            for key, dR in self.dataRows[mode].items():
+            for i, row in data.iterrows():
+                dR = self.dataRows[mode][row['id']]
                 dR.story_graph = self.prepare_ent_graph(dR.story_sents)
-            logging.info("Processed {} stories in mode {}".format(len(self.dataRows[mode]),
+                ct += 1
+            logging.info("Processed {} stories in mode {}".format(ct,
                                                                   mode))
             self.max_sent_length = max_sent_length
         else:
-            for key, dR in self.dataRows[mode][test_file].items():
+            for i,row in data.iterrows():
+                dR = self.dataRows[mode][test_file][row['id']]
                 dR.story_graph = self.prepare_ent_graph(dR.story_sents)
+                ct +=1
             logging.info("Processed {} stories in mode {} and file: {}".format(
-                len(self.dataRows[mode][test_file]), mode, test_file))
+                ct, mode, test_file))
 
 
 
