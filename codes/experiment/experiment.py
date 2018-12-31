@@ -182,6 +182,7 @@ def _run_one_epoch(dataloader, experiment, mode, filename=''):
 
     log_batch_losses = []
     log_batch_rel = []
+    batch_size = len(dataloader)
 
     for batch_idx, batch in enumerate(dataloader):
         experiment.iteration_index[mode] += 1
@@ -204,7 +205,8 @@ def _run_one_epoch(dataloader, experiment, mode, filename=''):
 
         num_examples += batch.batch_size
         log_batch_losses.append(batch_loss)
-        experiment.comet_ml.log_metric("loss", batch_loss, step=batch_idx)
+        step = (experiment.epoch_index-1)*batch_size + batch_idx
+        experiment.comet_ml.log_metric("loss", batch_loss, step=step)
 
         batch = experiment.generator.process_batch(batch, outputs, beam=False)
         true_inp.extend(batch.true_inp)
@@ -212,7 +214,7 @@ def _run_one_epoch(dataloader, experiment, mode, filename=''):
         pred_outp.extend(batch.pred_outp)
 
         accuracy = experiment.quality_metrics.relation_overlap(batch.pred_outp, batch.true_outp)
-        experiment.comet_ml.log_metric("accuracy", accuracy, step=batch_idx)
+        experiment.comet_ml.log_metric("accuracy", accuracy, step=step)
         log_batch_rel.append(accuracy)
         epoch_rel.append(accuracy)
 
