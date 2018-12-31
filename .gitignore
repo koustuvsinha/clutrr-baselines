@@ -113,6 +113,8 @@ venv.bak/
 config/*
 !config/sample.config.yaml
 logs/*
+!logs/.gitkeep
 plots/*
+!plots/.gitkeep
 model/*
 data/*
