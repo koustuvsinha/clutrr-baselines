@@ -107,7 +107,7 @@ class DataUtility():
         self.data_has_text_target = False
         self.preprocessed = set() # set of puzzle ids which has been preprocessed
 
-    def process_data(self, base_path, train_file, load_dictionary=True):
+    def process_data(self, base_path, train_file, load_dictionary=True, preprocess=True):
         """
         Load data and run preprocessing scripts
         :param main_file .csv file of the data
@@ -130,11 +130,14 @@ class DataUtility():
             for key, value in dictionary.items():
                 setattr(self, key, value)
         train_data, max_ents_train, = self.process_entities(train_data)
-        if not load_dictionary:
-            self.max_ents = max_ents_train + 1 # keep an extra dummy entity for unknown entities
-        self.preprocess(train_data, mode='train')
-        self.train_data = train_data
-        self.split_indices()
+        if preprocess:
+            if not load_dictionary:
+                self.max_ents = max_ents_train + 1 # keep an extra dummy entity for unknown entities
+            self.preprocess(train_data, mode='train')
+            self.train_data = train_data
+            self.split_indices()
+        else:
+            return train_data, max_ents_train
 
     def process_test_data(self, base_path, test_files):
         """
@@ -142,7 +145,7 @@ class DataUtility():
         :param test_files: array of file names
         :return:
         """
-        self.test_files = [os.path.join(base_path, t) + '_test.csv' for t in test_files]
+        self.test_files = test_files #[os.path.join(base_path, t) + '_test.csv' for t in test_files]
         test_datas = [pd.read_csv(tf, comment='#') for tf in self.test_files]
         for test_data in test_datas:
             self._check_data(test_data)
@@ -283,7 +286,7 @@ class DataUtility():
 
         # only assign word-ids in train data
         if mode == 'train' and not self.load_dictionary:
-            self.word2id, self.id2word = self.assign_wordids(words)
+            self.assign_wordids(words)
 
         # get adj graph
         ct = 0
@@ -329,15 +332,20 @@ class DataUtility():
                 tmp_w = ''
         return corr_w
 
+    def _insert_wordid(self, token, id):
+        if token not in self.word2id:
+            assert id not in set([v for k,v in self.word2id.items()])
+            self.word2id[token] = id
+            self.id2word[id] = token
+
     def assign_wordids(self, words, special_tokens=None):
         """
         Given a set of words, create word2id and id2word
         :param words: set of words
         :param special_tokens: set of special tokens to add into dictionary
-        :return: word2id, id2word
+        :return:
         """
         count = 0
-        word2id = {}
         if not special_tokens:
             special_tokens = self.special_tokens
         ## if max_vocab is not -1, then shrink the word size
@@ -346,16 +354,16 @@ class DataUtility():
         else:
             words = list(words.keys())
         # add pad token
-        word2id[PAD_TOKEN] = count
+        self._insert_wordid(PAD_TOKEN, count)
         count +=1
         # reserve a block for entities. Record this block for future use.
         start_ent_num = count
         for idx in range(self.max_ents - 1):
-            word2id['@ent{}'.format(idx)] = count
+            self._insert_wordid('@ent{}'.format(idx), count)
             count +=1
         # reserve a dummy entity
         self.dummy_entity = '@ent{}'.format(self.max_ents - 1)
-        word2id[self.dummy_entity] = count
+        self._insert_wordid(self.dummy_entity, count)
         count += 1
         end_ent_num = count
         self.max_entity_id = end_ent_num - 1
@@ -366,19 +374,16 @@ class DataUtility():
                 if tok == PAD_TOKEN:
                     continue
                 else:
-                    word2id[tok] = count
+                    self._insert_wordid(tok, count)
                     count += 1
         # finally add the words
         for word in words:
-            if word not in word2id:
-                word2id[word] = count
+            if word not in self.word2id:
+                self._insert_wordid(word, count)
                 count += 1
-        # inverse
-        id2word = {v: k for k, v in word2id.items()}
 
-        logging.info("Created dictionary. Words : {}, Entities : {}".format(
-            len(word2id), len(self.entity_ids)))
-        return word2id, id2word
+        logging.info("Modified dictionary. Words : {}, Entities : {}".format(
+            len(self.word2id), len(self.entity_ids)))
 
     def assign_target_id(self, targets):
         """
@@ -777,23 +782,27 @@ def generate_dictionary(config):
     :return:
     """
     parent_dir = os.path.abspath(os.pardir).split('/codes')[0]
-    base_path = os.path.join(parent_dir, config.dataset.base_path)
-    dictionary_file = os.path.join(parent_dir, config.dataset.base_path, 'dict.json')
+    dictionary_file = os.path.join(parent_dir, 'data', config.dataset.data_path, 'dict.json')
     if os.path.isfile(dictionary_file):
         logging.info("Dictionary present at {}".format(dictionary_file))
         return
     logging.info("Creating dictionary with all test files")
     ds = DataUtility(config)
+    datas = []
+    train_data, max_ents = ds.process_data(os.path.join(parent_dir, 'data', config.dataset.data_path),
+                    config.dataset.train_file, load_dictionary=False, preprocess=False)
+    datas.append(train_data)
     for test_file in config.dataset.test_files:
-        trainfl = os.path.join(base_path, test_file) + '_train.csv'
-        testfl = os.path.join(base_path, test_file) + '_test.csv'
-        ds.process_data(os.path.join(parent_dir, config.dataset.base_path),
-                        trainfl,load_dictionary=False)
-        ds.process_data(os.path.join(parent_dir, config.dataset.base_path),
-                        testfl, load_dictionary=False)
+        test_data, max_e = ds.process_data(os.path.join(parent_dir, 'data', config.dataset.data_path),
+                        test_file, load_dictionary=False, preprocess=False)
+        datas.append(test_data)
+        if max_e > max_ents:
+            max_ents = max_e
+    ds.max_ents = max_ents
+    for data in datas:
+        ds.preprocess(data)
 
     # save dictionary
-    dictionary_file = os.path.join(parent_dir, config.dataset.base_path, 'dict.json')
     dictionary = {
         'word2id': ds.word2id,
         'id2word': ds.id2word,

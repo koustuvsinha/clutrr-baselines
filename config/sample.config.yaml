@@ -9,9 +9,8 @@ general:
   commit_id: ''
   mode: train # can be train or infer
 dataset:
-  base_path: data_v3
-  train_file: genv3_m3
-  test_files: [genv3_m3]
+  base_url: http://localhost:9300
+  data_path: data_v3
   save_path: dtp.pkl
   load_save_path: false
   load_dictionary: false

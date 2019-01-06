@@ -14,6 +14,10 @@ from codes.metric.metric_registry import get_metric_dict
 from codes.metric.quality_metric import QualityMetric
 from codes.net.generator import Generator
 from codes.utils.experiment_utils import Experiment
+import glob
+from io import BytesIO
+from zipfile import ZipFile
+from urllib.request import urlopen
 
 import logging
 logging.basicConfig(
@@ -21,6 +25,22 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
+def get_data(config):
+    # check if data folder is present. If not, create it
+    parent_dir = os.path.abspath(os.pardir).split('/codes')[0]
+    base_path = os.path.join(parent_dir, 'data')
+    if not os.path.exists(base_path):
+        os.makedirs(base_path)
+    data_path = os.path.join(base_path, config.dataset.data_path)
+    if not os.path.exists(data_path):
+        remote = "{}/{}.zip".format(config.dataset.base_url, config.dataset.data_path)
+        logging.info("Downloading data from {}".format(remote))
+        resp = urlopen(remote)
+        zipfile = ZipFile(BytesIO(resp.read()))
+        os.makedirs(data_path)
+        zipfile.extractall(path=data_path)
+    else:
+        logging.info("Data present at {}".format(data_path))
 
 
 def run_experiment(config, exp, resume=False):
@@ -34,10 +54,19 @@ def run_experiment(config, exp, resume=False):
     write_config_log(config)
     experiment = Experiment()
     parent_dir = os.path.abspath(os.pardir).split('/codes')[0]
+    # get data
+    get_data(config)
+    base_path = os.path.join(parent_dir, 'data', config.dataset.data_path)
+    # get the list of files in base path
+    train_files = glob.glob(os.path.join(base_path, "*_train.csv"))
+    assert len(train_files) == 1  # make sure we have only one train file
+    config.dataset.train_file = train_files[0]
+    test_files = glob.glob(os.path.join(base_path, "*_test.csv"))
+    assert len(test_files) > 0  # make sure there exist at least one test file
+    config.dataset.test_files = test_files
     # generate dictionary
     generate_dictionary(config)
     data_util = DataUtility(config)
-    base_path = os.path.join(parent_dir, config.dataset.base_path)
     if config.dataset.load_save_path or config.general.mode == 'infer' or resume:
         data_util.load(os.path.join(parent_dir, config.dataset.base_path, config.dataset.save_path))
     else:
