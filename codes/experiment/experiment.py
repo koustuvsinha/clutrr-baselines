@@ -68,11 +68,11 @@ def run_experiment(config, exp, resume=False):
     generate_dictionary(config)
     data_util = DataUtility(config)
     if config.dataset.load_save_path or config.general.mode == 'infer' or resume:
-        data_util.load(os.path.join(parent_dir, config.dataset.base_path, config.dataset.save_path))
+        data_util.load(os.path.join(parent_dir, 'data', config.dataset.data_path, config.dataset.save_path))
     else:
         data_util.process_data(base_path,
-                               config.dataset.train_file)
-        data_util.save(os.path.join(parent_dir, config.dataset.base_path, config.dataset.save_path))
+                               config.dataset.train_file, load_dictionary=True)
+        data_util.save(os.path.join(parent_dir, 'data', config.dataset.data_path, config.dataset.save_path))
 
     vocab_size = len(data_util.word2id)
     logging.info("Vocab Size : {}".format(vocab_size))

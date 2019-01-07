@@ -9,7 +9,7 @@ def choose_message_function(model_config):
     elif model_config.graph.message_function.fn_type == 'node':
         return NodeMessageFunction(model_config)
     else:
-        raise NotImplementedError("Update function {} not implemented".format(
+        raise NotImplementedError("Message function {} not implemented".format(
             model_config.graph.message_function.fn_type))
 
 

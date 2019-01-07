@@ -156,17 +156,6 @@ class GraphEncoder(Net):
             h_pos = one_hot_embedding(node_indices, max_nodes).to(h_in.device) # batch x max_nodes x max_nodes
         # first view
         true_edges, hidden_rep = self.extract_edge_embedding(batch)
-        # get the queries
-        ids = batch.outp_ents
-        max_ents = batch.adj_mat.size(1)
-        num_ents = batch.outp_ents.size(-1)
-        num_abs = batch.outp.size(1)
-        # correct ids for word2id which begins with 1
-        ids = ids - 1
-        # prune based on query
-        start_ids = ids.squeeze(1)[:,0].cpu().numpy()
-        end_ids = ids.squeeze(1)[:,-1].cpu().numpy()
-        batch.prune_paths(start_ids, end_ids)
         g = batch.inp_graphs
         h_feature = self.graph_feature
         h_feature = h_feature.unsqueeze(1).expand(batch.batch_size, h_pos.size(1), h_feature.size(1))

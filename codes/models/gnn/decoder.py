@@ -83,23 +83,19 @@ class GraphLSTMDecoder(Net):
     def calculate_query(self, batch):
         ### Calculate the query with respect to the entities. Concatenate the query one hot vector
         ### and the hidden messages, and pass it to the edge network
-        encoder_inp, encoder_outp, outp_ents = batch.inp, batch.encoder_outputs, batch.outp_ents
-        ids = outp_ents
+        encoder_inp, encoder_outp, query = batch.inp, batch.encoder_outputs, batch.query
+        ids = query
         max_ents = batch.adj_mat.size(1)
-        num_ents = outp_ents.size(-1)
-        num_abs = batch.outp.size(1)
+        num_ents = query.size(-1)
         # correct ids for word2id which begins with 1
         ids = ids - 1
-        ids = ids.view(-1, num_ents).unsqueeze(1) # ids : B x 1 x num_ents
+        ids = ids.view(-1, num_ents).unsqueeze(1) # ids : B x 1 x query_ents
         check_id_emb(ids, max_ents)
-        id_mask = torch.zeros(outp_ents.size(0) * num_abs, max_ents, outp_ents.size(-1)).to(ids.device)
+        id_mask = torch.zeros(query.size(0), max_ents, query.size(-1)).to(ids.device) # B x max_ents x query_ents
         id_mask.scatter_(1, ids, 1)
         id_mask = id_mask.long()
-        encoder_outp = self.__expand_abs(encoder_outp, num_abs)
         encoder_model = batch.encoder_model
         h_pos = encoder_model.h_pos
-        # expand h_pos
-        h_pos = self.__expand_abs(h_pos, num_abs)
         query_rep = encoder_model.mpnn.readout_function(
             encoder_outp, h_pos, id_mask, encoder_model.mpnn.message_function.edge_network)
         return query_rep
@@ -109,17 +105,11 @@ class GraphLSTMDecoder(Net):
         hidden_rep = step_batch.hidden_rep
         query_rep = step_batch.query_rep
         encoder_outputs = batch.encoder_outputs
-        max_abs = batch.ent_mask.size(1)
-        encoder_outputs = self.__expand_abs(encoder_outputs, max_abs)
-        mask = batch.inp_ent_mask # Bx max_nodes x 1
-        ex_mask = self.__expand_abs(mask.unsqueeze(-1), max_abs)
-        encoder_length = batch.inp_lengths
-        check_id_emb(decoder_inp, self.model_config.vocab_size)
-        decoder_inp = self.embedding(decoder_inp)
+        mask = batch.inp_ent_mask.unsqueeze(-1) # Bx max_nodes x 1
 
         if self.model_config.loss_type == 'classify':
             if self.model_config.graph.readout_function.read_mode == 'average':
-                graph_state = self.avg_readout(encoder_outputs, ex_mask)
+                graph_state = self.avg_readout(encoder_outputs, mask)
             elif self.model_config.graph.readout_function.read_mode == 'attention':
                 # not all entities are useful (the work,school, etc entities), thus perform an attention
                 graph_state = self.attn_readout(encoder_outputs, query_rep.transpose(0,1), mask.float())
@@ -130,6 +120,8 @@ class GraphLSTMDecoder(Net):
 
             outp = self.decoder2vocab(mlp_inp)
         else:
+            check_id_emb(decoder_inp, self.model_config.vocab_size)
+            decoder_inp = self.embedding(decoder_inp)
             batch_size, max_nodes, enc_dim = batch.encoder_outputs.size()
             state = hidden_rep[0][-1]
             last_hidden_state = torch.cat([state, query_rep.squeeze(1)], dim=1).unsqueeze(0)

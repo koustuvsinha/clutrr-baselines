@@ -89,7 +89,7 @@ model:
     message_function:
       num_layers: 2
       use_attention: True
-      fn_type: lstm # either lstm or mlp
+      fn_type: edge # either edge or node
       use_layer_norm: True
     readout_function:
       num_layers: 2

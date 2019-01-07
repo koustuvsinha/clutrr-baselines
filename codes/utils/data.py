@@ -48,7 +48,7 @@ class DataUtility():
     """
     def __init__(self,
                  config,
-                 num_workers=4,
+                 num_workers=1,
                  common_dict=True):
         """
 
@@ -113,10 +113,7 @@ class DataUtility():
         :param main_file .csv file of the data
         :return:
         """
-        if not train_file.endswith('.csv'):
-            self.train_file = os.path.join(base_path, train_file) + '_train.csv'
-        else:
-            self.train_file = train_file
+        self.train_file = train_file
         train_data = pd.read_csv(self.train_file, comment='#')
         train_data = self._check_data(train_data)
         logging.info("Start preprocessing data")
@@ -214,6 +211,7 @@ class DataUtility():
                     max_ents = len(uniq_ents)
                 pid = row['id']
                 query = row['query'] if self.data_has_query else ''
+                query = list(make_tuple(query))
                 text_query = row['text_query'] if self.data_has_text_query else ''
                 text_target = row['text_target'] if self.data_has_text_target else ''
                 entity_map = {}
@@ -222,11 +220,15 @@ class DataUtility():
                     story = story.replace('[{}]'.format(ent), entity_map[ent])
                     text_target = text_target.replace('[{}]'.format(ent), entity_map[ent])
                     text_query = text_query.replace('[{}]'.format(ent), entity_map[ent])
-                    query = query.replace('{}'.format(ent), entity_map[ent])
+                    try:
+                        ent_index = query.index(ent)
+                        query[ent_index] = entity_map[ent]
+                    except ValueError:
+                        pass
                 data.at[i, 'story'] = story
                 data.at[i, 'text_target'] = text_target
                 data.at[i, 'text_query'] = text_query
-                data.at[i, 'query'] = query
+                data.at[i, 'query'] = tuple(query)
                 data.at[i, 'entities'] = json.dumps(list(uniq_ents))
                 self.entity_map[pid] = entity_map
         else:
@@ -273,7 +275,7 @@ class DataUtility():
             if max_sl > max_sent_length:
                 max_sent_length = max_sl
             if self.data_has_query:
-                dataRow.query = make_tuple(row['query'])
+                dataRow.query = row['query']
             if self.data_has_target:
                 dataRow.target = self.target_word2id[row['target']]
             if mode == 'train':
@@ -582,6 +584,10 @@ class SequenceDataLoader(data.Dataset):
         # calculate the output
         target = [self.dataRows[index].target]
         query = [self.data.get_token(tp) for tp in self.dataRows[index].query] # tuple
+        # debugging
+        if self.data.get_token('UNKUNK') in query:
+            print("shit")
+            raise AssertionError("Unknown element cannot be in the query. Check the data.")
         # one hot integer mask over the input text which specifies the query strings
         query_mask = [[1 if w == ent else 0 for w in self.__flatten__(inp_row)] for ent in query]
         # TODO: use query_text and query_text length and pass it back
@@ -694,15 +700,17 @@ def sent_collate_fn(data):
 
     sent_lengths = pad_sent_lengths(sent_lengths)
 
-    text_target, text_target_lengths = nested_merge(text_target)
+    text_target, text_target_lengths = simple_merge(text_target)
     query = torch.LongTensor(query)
-    query_mask = pad_nested_ents(query_mask, inp_lengths)
+    query_mask = pad_ents(query_mask, inp_lengths)
+    target = torch.LongTensor(target)
 
     # prepare batch
     batch = Batch(
         inp=inp_data,
         inp_lengths=inp_lengths,
         sent_lengths=sent_lengths,
+        target=target,
         text_target=text_target,
         text_target_lengths=text_target_lengths,
         inp_ents=inp_ents,
@@ -812,7 +820,8 @@ def generate_dictionary(config):
         'max_vocab': ds.max_vocab,
         'max_entity_id': ds.max_entity_id,
         'entity_ids': ds.entity_ids,
-        'dummy_entitiy': ds.dummy_entity
+        'dummy_entitiy': ds.dummy_entity,
+        'entity_map': ds.entity_map
     }
     json.dump(dictionary, open(dictionary_file,'w'))
     logging.info("Saved dictionary at {}".format(dictionary_file))
