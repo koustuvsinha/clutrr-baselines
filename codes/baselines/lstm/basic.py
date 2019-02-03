@@ -4,6 +4,8 @@ import torch.nn as nn
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from codes.net.base_net import Net
 from codes.utils.util import check_id_emb
+from codes.net.attention import Attn
+from torch.nn import functional as F
 import pdb
 
 class SimpleEncoder(Net):
@@ -83,7 +85,9 @@ class SimpleDecoder(Net):
                 model_config.vocab_size
             )
 
-        self.attn_module = attn_module
+        self.attn_module = None
+        if model_config.decoder.use_attention:
+            self.attn_module = LSTMAttn(model_config.decoder.hidden_dim, input_dim)
 
     def init_hidden(self, encoder_states, batch_size):
         # initial hidden state of the decoder will be an average of encoder states
@@ -125,7 +129,15 @@ class SimpleDecoder(Net):
         encoder_outputs = batch.encoder_outputs
         _, seq_len, dim = encoder_outputs.size()
         if self.model_config.loss_type == 'classify':
-            mlp_inp = torch.cat([query_rep.squeeze(1), encoder_outputs[:, -1, :]], -1)
+            if self.attn_module:
+                # print('+++++++++++++++', query_rep.shape)
+                # print('+++++++++++++++', encoder_outputs.shape)
+                weighted_encoder_outputs = self.attn_module(query_rep, encoder_outputs)
+                # print('+++++++++++++++', weighted_encoder_outputs.shape)
+                # print('+++++++++++++++', encoder_outputs[:, -1, :].shape)
+                mlp_inp = torch.cat([query_rep.squeeze(1), weighted_encoder_outputs], -1)
+            else:
+                mlp_inp = torch.cat([query_rep.squeeze(1), encoder_outputs[:, -1, :]], -1)
         else:
             decoder_inp = step_batch.decoder_inp
             check_id_emb(decoder_inp, self.model_config.vocab_size)
@@ -144,4 +156,38 @@ class SimpleDecoder(Net):
         """
         size_mid = int(tensor.size(0) / 2)
         return torch.cat([tensor[:size_mid], tensor[size_mid:]], -1)
+
+class LSTMAttn(nn.Module):
+    '''
+    Used by SimpleDecoder
+    '''
+    def __init__(self, hidden_size, concat_size=None):
+        super(LSTMAttn, self).__init__()
+
+        self.hidden_size = hidden_size
+
+        self.concat_size = concat_size
+        if not concat_size:
+            self.concat_size = self.hidden_size*3
+        self.attn1 = nn.Linear(self.concat_size, self.hidden_size, bias=False)
+        print(self.concat_size, self.hidden_size)
+        self.attn2 = nn.Linear(self.hidden_size, 1, bias=False)
+
+    def forward(self, hidden, encoder_outputs):
+        '''
+        :param hidden:          B x 1 x H
+        :param encoder_outputs: B x T x H
+        :return:
+        '''
+        encoder_outputs = encoder_outputs.transpose(0, 1)   # T x B x H
+        # print('---', encoder_outputs.shape)
+        hidden = hidden.transpose(0, 1).repeat(encoder_outputs.shape[0], 1, 1) # T x B x H
+        # print('---', hidden.shape)
+        enc_hid = torch.cat([encoder_outputs, hidden], 2)  # T x B x 2H
+        # print('---', enc_hid.shape)
+        e1= F.tanh(self.attn1(enc_hid))
+        e = self.attn2(e1)     # T x B x 1
+        a = F.softmax(e, dim=0)    # T x B x 1
+
+        return (a * encoder_outputs).sum(dim=0)    # B x H
 
