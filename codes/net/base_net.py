@@ -131,6 +131,22 @@ class Net(nn.Module):
             *network_list
         )
 
+    def get_mlp_h(self, input_dim, output_dim, num_layers=2, dropout=0.0):
+        network_list = []
+        assert num_layers > 0
+        network_list.append(nn.Linear(input_dim, output_dim))
+        if num_layers > 1:
+            for _ in range(num_layers - 1):
+                network_list.append(nn.Linear(output_dim, output_dim))
+                network_list.append(nn.ReLU())
+                network_list.append(nn.Dropout(dropout))
+        else:
+            network_list.append(nn.ReLU())
+            network_list.append(nn.Dropout(dropout))
+        return nn.Sequential(
+            *network_list
+        )
+
     def forward(self, data):
         '''
         Forward pass of the network

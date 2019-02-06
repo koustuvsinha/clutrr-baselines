@@ -101,6 +101,11 @@ model:
       use_layer_norm: True
     edge_embedding: word # if edge_embedding is lstm, then use an lstm to extract the relation, else average word embedding
     dropout: 0.0
+  rn:
+    g_theta_dim: 265
+    f_theta:
+      dim_1: 256
+      dim_2: 512
 log:
   file_path: ''
   logs_per_epoch: 50

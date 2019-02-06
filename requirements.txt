@@ -1,7 +1,5 @@
 addict
 nltk
-sacred
-sacredboard
 PyYAML
 names
 inflect
