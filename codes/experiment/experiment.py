@@ -243,7 +243,6 @@ def _run_one_epoch(dataloader, experiment, mode, filename=''):
         pred_outp.extend(batch.pred_outp)
 
         accuracy = experiment.quality_metrics.relation_overlap(batch.pred_outp, batch.true_outp)
-        experiment.comet_ml.log_metric("accuracy", accuracy, step=step)
         log_batch_rel.append(accuracy)
         epoch_rel.append(accuracy)
 
@@ -253,13 +252,13 @@ def _run_one_epoch(dataloader, experiment, mode, filename=''):
     epoch_rel = np.mean(epoch_rel)
     if mode == 'val':
         experiment.validation_metrics['val_acc'].update(epoch_rel)
-        experiment.validation_metrics['loss'].update(loss)
+        experiment.validation_metrics['val_loss'].update(loss)
     logging.info(" -------------------------- ")
     logging.info("Mode : {} , File : {}".format(mode, filename))
-    logging.info("Loss : {}, Relation Accuracy : {}".format(
+    logging.info("Loss : {}, Accuracy : {}".format(
         loss, epoch_rel))
 
-    if mode != 'train':
+    if mode == 'test':
         # save predicted examples
         true_inp = [' '.join(sent) for sent in true_inp]
         true_outp = [' '.join(sent) for sent in true_outp]
