@@ -15,6 +15,7 @@ from codes.utils.config import get_config
 import os
 import json
 from ast import literal_eval as make_tuple
+import random
 import logging
 logging.basicConfig(
     level=logging.INFO,
@@ -207,6 +208,7 @@ class DataUtility():
                 story = row['story']
                 ents = re.findall('\[(.*?)\]', story)
                 uniq_ents = set(ents)
+                uniq_ents = random.sample(list(uniq_ents), len(uniq_ents))
                 if len(uniq_ents) > max_ents:
                     max_ents = len(uniq_ents)
                 pid = row['id']

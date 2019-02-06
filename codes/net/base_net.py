@@ -161,10 +161,14 @@ class Net(nn.Module):
         return sum([np.prod(p.size()) for p in model_parameters])
 
     def init_embeddings(self):
+        """
+        Initialize embeddings
+        :return:
+        """
         self.embedding = nn.Embedding(num_embeddings=self.model_config.vocab_size,
-                                     embedding_dim=self.model_config.embedding.dim,
-                                     padding_idx=0,
-                                     max_norm=1)
+                                      embedding_dim=self.model_config.embedding.dim,
+                                      padding_idx=0,
+                                      max_norm=1)
         if (self.model_config.embedding.should_use_pretrained_embedding):
             self.load_embeddings()
         else:
@@ -172,12 +176,20 @@ class Net(nn.Module):
         self.embedding.weight.data[self.embedding.padding_idx].fill_(0)
 
     def load_embeddings(self):
+        """
+        Optional : Load pretrained embeddings for the words
+        :return:
+        """
         pre_emb = torch.load(self.model_config.model.embedding.pretrained_embedding_path)
         if pre_emb.size(1) != self.embedding.weight.size(1):
             raise RuntimeError('Embedding dimensions mismatch for pretrained embedding')
         self.embedding.weight.data = pre_emb
-        
+
     def freeze_embeddings(self):
+        """
+        Only use this when loading embeddings
+        :return:
+        """
         self.embedding.requies_grad = False
 
     def get_entity_mask(self, ids, entity_id=0, mode='max'):
@@ -198,7 +210,8 @@ class Net(nn.Module):
 
     def invalidate_embeddings(self):
         """
-        Invalidate the entity embeddings
+        Invalidate the entity embeddings.
+        At each epoch, randomize the entity embeddings
         :return:
         """
         vocab_size = self.embedding.weight.data.size(0)
@@ -208,4 +221,10 @@ class Net(nn.Module):
         mask = mask.unsqueeze(1)
         weight = self.embedding.weight.data
         weight = weight * mask
+        random_weights = torch.nn.init.xavier_uniform_(torch.zeros(weight.size()))
+        entity_mask = (1 - mask)
+        # check for padding
+        entity_mask[0] = 0
+        random_weights = random_weights * entity_mask
+        weight = weight + random_weights
         self.embedding.weight.data = weight

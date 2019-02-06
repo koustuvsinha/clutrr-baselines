@@ -11,12 +11,17 @@ class Trainer:
                  max_entity_id=0):
         """
         Generic trainer for an encoder-decoder model
+        Changes:
+            - now bringing the embedding handling logic to trainer itself,
+            - so we can have a clear demarcation of concerns
         :param encoder_model:
         :param decoder_model:
         :param max_entity_id: max entity id
         """
         self.model_config = model_config
+        # initialize embeddings
         self.encoder_model = encoder_model
+        self.encoder_model.init_embeddings()
         self.decoder_model = decoder_model
         loss_criteria = model_config.loss_criteria
         if loss_criteria == 'CE':
@@ -68,71 +73,31 @@ class Trainer:
         :param mode:
         :return:
         """
-        batch_size  = batch.batch_size
-        loss = 0
+        # choose a policy of invalidating entity embeddings here
         if self.model_config.encoder.invalidate_embeddings:
             # invalidate the entity embeddings
             self.encoder_model.invalidate_embeddings()
-        if self.model_config.decoder.invalidate_embeddings:
-            self.decoder_model.invalidate_embeddings()
+
         # run the encoder
         encoder_outputs, encoder_hidden = self.encoder_model(batch)
         batch.encoder_outputs = encoder_outputs
         batch.encoder_hidden = encoder_hidden
         batch.encoder_model = self.encoder_model
-        # calculate the hidden state of decoder
-        hidden_rep = self.decoder_model.init_hidden(encoder_outputs, batch_size)
-        #hidden_rep[0] = self.expand_hidden(hidden_rep[0])
-        #hidden_rep[1] = self.expand_hidden(hidden_rep[1])
+
         query_rep = self.decoder_model.calculate_query(batch)  # query representation or question representation
         decoder_inp = None
-        decoder_outp = None
 
-        if self.model_config.loss_type == 'seq2seq':
-            teacher_forcing = False
-
-            max_outp_length = max([w for bt in batch.outp_lengths for w in bt])
-            batch.outp = batch.outp.view(-1, max_outp_length)
-
-            for step in range(max_outp_length - 1):
-                if mode == 'train':
-                    teacher_forcing = np.random.choice([True, False],p=[self.tf_ratio, 1-self.tf_ratio])
-                if teacher_forcing or step == 0:
-                    decoder_inp = batch.outp[:,step].unsqueeze(1)
-                else:
-                    decoder_inp = decoder_inp
-
-                step_batch = Dict()
-                step_batch.decoder_inp = decoder_inp
-                step_batch.hidden_rep = hidden_rep
-                step_batch.query_rep = query_rep
-
-                logits, attn, hidden_rep = self.decoder_model(batch, step_batch)
-                topv, topi = logits.data.topk(1)
-                next_words = topi.squeeze(1)
-                loss += self.criteria(logits.squeeze(1), batch.outp[:, step+1])
-                if step == 0:
-                    decoder_outp = next_words
-                else:
-                    decoder_outp = torch.cat((decoder_outp, next_words), 1)
-                decoder_inp = next_words
-
-        elif self.model_config.loss_type == 'classify':
-            # batch.outp should be B x 1
-            step_batch = Dict()
-            step_batch.decoder_inp = decoder_inp
-            step_batch.hidden_rep = hidden_rep
-            step_batch.query_rep = query_rep
-            logits, attn, hidden_rep = self.decoder_model(batch, step_batch)
-            if logits.dim() > 2:
-                logits = logits.squeeze(1)
-            loss = self.criteria(logits, batch.target.squeeze(1))
-            # generate prediction
-            topv, topi = logits.data.topk(1)
-            next_words = topi.squeeze(1)
-            decoder_outp = next_words
-        else:
-            raise NotImplementedError("Value in config.model.loss_type not implemented.")
+        # batch.outp should be B x 1
+        step_batch = Dict()
+        step_batch.query_rep = query_rep
+        logits, attn, hidden_rep = self.decoder_model(batch, step_batch)
+        if logits.dim() > 2:
+            logits = logits.squeeze(1)
+        loss = self.criteria(logits, batch.target.squeeze(1))
+        # generate prediction
+        topv, topi = logits.data.topk(1)
+        next_words = topi.squeeze(1)
+        decoder_outp = next_words
 
 
         return decoder_outp, loss

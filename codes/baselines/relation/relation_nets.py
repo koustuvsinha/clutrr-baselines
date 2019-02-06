@@ -19,11 +19,7 @@ class RelationNetworkEncoder(Net):
     """
     def __init__(self, model_config, shared_embeddings=None):
         super().__init__(model_config)
-
-        if not shared_embeddings:
-            self.init_embeddings()
-        else:
-            self.embedding = shared_embeddings
+        self.embedding = None
 
         self.reader = nn.LSTM(
             model_config.embedding.dim,
