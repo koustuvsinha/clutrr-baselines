@@ -1,7 +1,7 @@
 from comet_ml import Experiment, ExistingExperiment
 from codes.experiment.experiment import run_experiment
 from codes.utils.config import get_config
-from codes.utils.util import set_seed
+from codes.utils.util import set_seed, flatten_dictionary
 from codes.utils.argument_parser import argument_parser
 from addict import Dict
 import logging
@@ -33,7 +33,7 @@ if __name__ == '__main__':
                         disabled=config.log.comet.disabled)
         name = 'exp_{}'.format(config_id)
         config.general.exp_name = name
-        ex.log_parameters(config)
+        ex.log_parameters(flatten_dictionary(config))
         ex.set_name(name)
         start(config, ex)
     else:

@@ -57,6 +57,7 @@ def run_experiment(config, exp, resume=False):
     # get data
     get_data(config)
     base_path = os.path.join(parent_dir, 'data', config.dataset.data_path)
+    exp.log_dataset_info(config.dataset.data_path)
     # get the list of files in base path
     train_files = glob.glob(os.path.join(base_path, "*_train.csv"))
     assert len(train_files) == 1  # make sure we have only one train file
