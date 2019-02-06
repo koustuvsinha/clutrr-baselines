@@ -119,7 +119,7 @@ class RelationNetworkDecoder(Net):
     def __init__(self, model_config, shared_embeddings=None):
         super().__init__(model_config)
         self.fout = self.get_mlp(model_config.encoder.rn.f_theta.dim_2,
-                                 model_config.vocab_size, num_layers=2)
+                                 model_config.target_size, num_layers=2)
 
     def init_hidden(self, encoder_outputs, batch_size):
         return None
