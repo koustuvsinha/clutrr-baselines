@@ -9,6 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from codes.net.base_net import Net
+import pdb
 
 
 class RelationNetworkEncoder(Net):
@@ -107,7 +108,7 @@ class RelationNetworkEncoder(Net):
         x_ = self.g_theta(x_)
         # reshape and sum
         x_g = x_.view(batch_size, -1, self.model_config.encoder.rn.g_theta_dim) # B x (len x len) x g_dim
-        x_g = x_g.sum(1).squeeze() # B x g_dim
+        x_g = x_g.sum(1) # B x g_dim
 
         # apply f
         x_f = self.f_theta_2(self.f_theta_1(x_g)) # B x f_dim
