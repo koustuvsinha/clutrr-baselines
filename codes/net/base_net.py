@@ -221,7 +221,8 @@ class Net(nn.Module):
         mask = mask.unsqueeze(1)
         weight = self.embedding.weight.data
         weight = weight * mask
-        random_weights = torch.nn.init.xavier_uniform_(torch.zeros(weight.size()))
+        random_weights = torch.nn.init.xavier_uniform_(torch.zeros(
+            weight.size()).to(self.embedding.weight.data.device))
         entity_mask = (1 - mask)
         # check for padding
         entity_mask[0] = 0
