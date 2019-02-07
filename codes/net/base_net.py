@@ -206,7 +206,7 @@ class Net(nn.Module):
             mask = ids > entity_id
         else:
             mask = ids == entity_id
-        mask = mask.to(self.embedding.weight.data.device)
+        mask = mask.to(self.embedding.weight.device)
         return mask.float()
 
     def invalidate_embeddings(self):
@@ -227,4 +227,4 @@ class Net(nn.Module):
             # check for padding
             entity_mask[0].fill_(0.0)
             self.embedding.weight.mul_(mask)
-            self.embedding.weight = nn.Parameter(self.embedding.weight + random_weights.mul_(entity_mask))
+            self.embedding.weight.add_(random_weights.mul_(entity_mask))

@@ -5,6 +5,7 @@ import torch.optim as optim
 import numpy as np
 from addict import Dict
 from codes.net.batch import Batch
+import pdb
 
 class Trainer:
     def __init__(self, model_config, encoder_model, decoder_model,
@@ -21,7 +22,6 @@ class Trainer:
         self.model_config = model_config
         # initialize embeddings
         self.encoder_model = encoder_model
-        self.encoder_model.init_embeddings()
         self.decoder_model = decoder_model
         loss_criteria = model_config.loss_criteria
         if loss_criteria == 'CE':
