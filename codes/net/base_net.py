@@ -6,6 +6,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import pdb
 
 class Net(nn.Module):
     '''
@@ -214,18 +215,15 @@ class Net(nn.Module):
         At each epoch, randomize the entity embeddings
         :return:
         """
-        vocab_size = self.embedding.weight.data.size(0)
-        ids = torch.arange(0, vocab_size)
-        assert self.max_entity_id > 0
-        mask = self.get_entity_mask(ids, self.max_entity_id)
-        mask = mask.unsqueeze(1)
-        weight = self.embedding.weight.data
-        weight = weight * mask
-        random_weights = torch.nn.init.xavier_uniform_(torch.zeros(
-            weight.size()).to(self.embedding.weight.data.device))
-        entity_mask = (1 - mask)
-        # check for padding
-        entity_mask[0] = 0
-        random_weights = random_weights * entity_mask
-        weight = weight + random_weights
-        self.embedding.weight.data = weight
+        with torch.no_grad():
+            vocab_size = self.embedding.weight.size(0)
+            ids = torch.arange(0, vocab_size)
+            assert self.max_entity_id > 0
+            mask = self.get_entity_mask(ids, self.max_entity_id)
+            mask = mask.unsqueeze(1)
+            random_weights = torch.nn.init.xavier_uniform_(torch.zeros(
+                self.embedding.weight.size()).to(self.embedding.weight.device))
+            entity_mask = (1 - mask)
+            # check for padding
+            entity_mask[0] = 0.0
+            self.embedding.weight.mul_(mask).add_(entity_mask * random_weights)
