@@ -8,8 +8,37 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+from codes.baselines.lstm.basic import SimpleEncoder
+from codes.net.batch import Batch
 from codes.net.base_net import Net
 import pdb
+
+
+class TPREncoder(Net):
+    def __init__(self, model_config, shared_embeddings=None):
+        super().__init__(model_config)
+
+        if not shared_embeddings:
+            self.init_embeddings()
+        else:
+            self.embedding = shared_embeddings
+
+        self.position_emb = nn.Embedding(num_embeddings=model_config.max_word_length,
+                                     embedding_dim=model_config.embedding.dim)
+        torch.nn.init.constant_(self.position_emb.weight, 1 / model_config.max_sent_length)
+
+    def forward(self, batch:Batch):
+        """
+        Perform hadamard product between position embeddings
+        https://arxiv.org/pdf/1811.12143.pdf
+        :param batch:
+        :return:
+        """
+        positions = torch.arange(batch.inp.shape[1]).unsqueeze(0).repeat(batch.inp.shape[0],1).to(batch.inp.device).long() # B x sent_len
+        positions = self.position_emb(positions) # B x sent_len x dim
+        data = self.embedding(batch.inp) # B x sent x dim
+        return data * positions, None # B x sent_len x dim
+
 
 
 class RelationNetworkEncoder(Net):
@@ -21,18 +50,18 @@ class RelationNetworkEncoder(Net):
         super().__init__(model_config)
         self.init_embeddings()
 
-        self.reader = nn.LSTM(
-            model_config.embedding.dim,
-            model_config.encoder.hidden_dim,
-            model_config.encoder.nlayers,
-            bidirectional=model_config.encoder.bidirectional,
-            batch_first=True,
-            dropout=model_config.encoder.dropout
-        )
-
         bidirectional_mult = 1
-        if model_config.encoder.bidirectional:
-            bidirectional_mult = 2
+        if model_config.encoder.rn.reader == 'lstm':
+            self.reader = SimpleEncoder(model_config, shared_embeddings=self.embedding)
+            if model_config.encoder.bidirectional:
+                bidirectional_mult = 2
+        elif model_config.encoder.rn.reader == 'tpr':
+            # Reader module as https://arxiv.org/pdf/1811.12143.pdf
+            # basically add a position embedding to the input sentence
+            self.reader = TPREncoder(model_config, shared_embeddings=self.embedding)
+        else:
+            raise NotImplementedError("model.encoder.rn.reader not defined")
+
         self.g_theta = self.get_mlp_h(model_config.encoder.hidden_dim * bidirectional_mult * 4, model_config.encoder.rn.g_theta_dim,
                                       num_layers=4)
         self.f_theta_1 = self.get_mlp_h(model_config.encoder.rn.g_theta_dim, model_config.encoder.rn.f_theta.dim_1, num_layers=1)
@@ -69,15 +98,8 @@ class RelationNetworkEncoder(Net):
         :param batch:
         :return:
         """
-        data = batch.inp
-        data_lengths = batch.inp_lengths
-        # embed the data
-        data = self.embedding(data)
         # read the data through a bidirectional encoder
-        data_pack = pack_padded_sequence(data, data_lengths, batch_first=True)
-        outp, hidden_rep = self.reader(data_pack)
-        outp, _ = pad_packed_sequence(outp, batch_first=True)
-        outp = outp.contiguous() # B x length x dim
+        outp,_ = self.reader(batch) # B x length x dim
 
         max_len = outp.size(1)
         batch_size = outp.size(0)
@@ -109,7 +131,7 @@ class RelationNetworkEncoder(Net):
         # apply f
         x_f = self.f_theta_2(self.f_theta_1(x_g)) # B x f_dim
 
-        return x_f, hidden_rep
+        return x_f, None
 
 class RelationNetworkDecoder(Net):
     """ Simple MLP decoder"""

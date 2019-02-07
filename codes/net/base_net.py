@@ -141,9 +141,11 @@ class Net(nn.Module):
             for _ in range(num_layers - 1):
                 network_list.append(nn.Linear(output_dim, output_dim))
                 network_list.append(nn.ReLU())
+                network_list.append(nn.BatchNorm1d(num_features=output_dim))
                 network_list.append(nn.Dropout(dropout))
         else:
             network_list.append(nn.ReLU())
+            network_list.append(nn.BatchNorm1d(num_features=output_dim))
             network_list.append(nn.Dropout(dropout))
         return nn.Sequential(
             *network_list

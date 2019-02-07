@@ -86,6 +86,7 @@ def run_experiment(config, exp, resume=False):
 
     logging.info("Loading testing data")
     data_util.process_test_data(base_path, config.dataset.test_files)
+    config.model.max_word_length = data_util.max_word_length
 
     ## set the edge dimension w.r.t the edge encoder
     if config.model.encoder.bidirectional and config.model.graph.edge_embedding == 'lstm':

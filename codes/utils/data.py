@@ -108,6 +108,8 @@ class DataUtility():
         self.data_has_target = False
         self.data_has_text_target = False
         self.preprocessed = set() # set of puzzle ids which has been preprocessed
+        self.max_sent_length = 0
+        self.max_word_length = 0
 
     def process_data(self, base_path, train_file, load_dictionary=True, preprocess=True):
         """
@@ -253,6 +255,7 @@ class DataUtility():
 
         words = Counter()
         max_sent_length = 0
+        max_word_length = 0
         if self.data_has_target:
             # assign target ids
             self.assign_target_id(list(data['target']))
@@ -265,6 +268,7 @@ class DataUtility():
             words.update([word for sent in story_sents for word in sent])
             dataRow.story_sents = story_sents
             dataRow.story = [word for sent in story_sents for word in sent] # flatten
+            max_word_length = max(max_word_length, len(dataRow.story))
             if self.data_has_text_target:
                 # preprocess text_target
                 text_target = self.tokenize(row['text_target'])
@@ -311,6 +315,9 @@ class DataUtility():
                 ct +=1
             logging.info("Processed {} stories in mode {} and file: {}".format(
                 ct, mode, test_file))
+
+        # update the max sentence length
+        self.max_word_length = max(self.max_word_length, max_word_length)
 
 
 
