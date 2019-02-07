@@ -32,6 +32,7 @@ class Net(nn.Module):
 
         ## to be set by trainer
         self.max_entity_id = 0
+        self.random_weights = None
 
     def loss(self, outputs, labels):
         '''
@@ -209,10 +210,11 @@ class Net(nn.Module):
         mask = mask.to(self.embedding.weight.device)
         return mask.float()
 
-    def invalidate_embeddings(self):
+    def randomize_entity_embeddings(self, fixed=False):
         """
-        Invalidate the entity embeddings.
+        Randomize the entity embeddings.
         At each epoch, randomize the entity embeddings
+        :param fixed: if True, then re-use the old random weights
         :return:
         """
         with torch.no_grad():
@@ -221,10 +223,16 @@ class Net(nn.Module):
             assert self.max_entity_id > 0
             mask = self.get_entity_mask(ids, self.max_entity_id)
             mask = mask.unsqueeze(1)
-            random_weights = torch.nn.init.xavier_uniform_(torch.zeros(
-                self.embedding.weight.size()).to(self.embedding.weight.device))
+            if fixed:
+                random_weights = self.random_weights
+            else:
+                random_weights = torch.nn.init.xavier_uniform_(torch.zeros(
+                    self.embedding.weight.size()).to(self.embedding.weight.device))
             entity_mask = (1 - mask)
             # check for padding
             entity_mask[0].fill_(0.0)
             self.embedding.weight.mul_(mask)
             self.embedding.weight.add_(random_weights.mul_(entity_mask))
+            self.random_weights = torch.tensor(random_weights)
+
+

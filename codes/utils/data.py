@@ -71,6 +71,7 @@ class DataUtility():
         self.dim = config.model.graph.edge_dim
         self.sentence_mode = config.dataset.sentence_mode
         self.single_abs_line = config.dataset.single_abs_line
+        self.num_entity_block = config.model.num_entity_block  # number of entity vectors we want to block off
 
         self.word2id = {}
         self.id2word = {}
@@ -129,8 +130,6 @@ class DataUtility():
                 setattr(self, key, value)
         train_data, max_ents_train, = self.process_entities(train_data)
         if preprocess:
-            if not load_dictionary:
-                self.max_ents = max_ents_train + 1 # keep an extra dummy entity for unknown entities
             self.preprocess(train_data, mode='train')
             self.train_data = train_data
             self.split_indices()
@@ -217,8 +216,11 @@ class DataUtility():
                 text_query = row['text_query'] if self.data_has_text_query else ''
                 text_target = row['text_target'] if self.data_has_text_target else ''
                 entity_map = {}
+                entity_id_block = list(range(0, self.num_entity_block))
                 for idx, ent in enumerate(uniq_ents):
-                    entity_map[ent] = '@ent{}'.format(idx)
+                    entity_id = random.choice(entity_id_block)
+                    entity_id_block.remove(entity_id)
+                    entity_map[ent] = '@ent{}'.format(entity_id)
                     story = story.replace('[{}]'.format(ent), entity_map[ent])
                     text_target = text_target.replace('[{}]'.format(ent), entity_map[ent])
                     text_query = text_query.replace('[{}]'.format(ent), entity_map[ent])
@@ -362,13 +364,14 @@ class DataUtility():
         count +=1
         # reserve a block for entities. Record this block for future use.
         start_ent_num = count
-        for idx in range(self.max_ents - 1):
+        for idx in range(self.num_entity_block):
             self._insert_wordid('@ent{}'.format(idx), count)
             count +=1
+        # not reserving a dummy entity now as we are reserving a whole block
         # reserve a dummy entity
-        self.dummy_entity = '@ent{}'.format(self.max_ents - 1)
-        self._insert_wordid(self.dummy_entity, count)
-        count += 1
+        # self.dummy_entity = '@ent{}'.format(self.max_ents - 1)
+        # self._insert_wordid(self.dummy_entity, count)
+        # count += 1
         end_ent_num = count
         self.max_entity_id = end_ent_num - 1
         self.entity_ids = list(range(start_ent_num, end_ent_num))

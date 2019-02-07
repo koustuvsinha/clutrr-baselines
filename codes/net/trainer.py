@@ -20,9 +20,17 @@ class Trainer:
         :param max_entity_id: max entity id
         """
         self.model_config = model_config
-        # initialize embeddings
+        self.max_entity_id = max_entity_id
         self.encoder_model = encoder_model
         self.decoder_model = decoder_model
+        self.encoder_model.max_entity_id = max_entity_id
+        self.decoder_model.max_entity_id = max_entity_id
+        # initialize embeddings
+        if self.model_config.embedding.entity_embedding_policy in ['random','fixed']:
+            # randomize the entity embeddings first time
+            self.encoder_model.randomize_entity_embeddings()
+        else:
+            print("Learning entity embeddings")
         loss_criteria = model_config.loss_criteria
         if loss_criteria == 'CE':
             self.criteria = nn.CrossEntropyLoss()
@@ -31,9 +39,6 @@ class Trainer:
         else:
             raise NotImplementedError("Provided loss criteria not implemented")
         self.tf_ratio = model_config.tf_ratio
-        self.max_entity_id = max_entity_id
-        self.encoder_model.max_entity_id = max_entity_id
-        self.decoder_model.max_entity_id = max_entity_id
 
     def get_optimizers(self):
         '''Method to return the list of optimizers for the trainer'''
@@ -74,9 +79,12 @@ class Trainer:
         :return:
         """
         # choose a policy of invalidating entity embeddings here
-        if self.model_config.encoder.invalidate_embeddings:
-            # invalidate the entity embeddings
-            self.encoder_model.invalidate_embeddings()
+        if self.model_config.embedding.entity_embedding_policy == 'random':
+            # randomize the entity embeddings at each epoch
+            self.encoder_model.randomize_entity_embeddings()
+        if self.model_config.embedding.entity_embedding_policy == 'fixed':
+            # fix the random entity embeddings which were used before
+            self.encoder_model.randomize_entity_embeddings(fixed=True)
 
         # run the encoder
         encoder_outputs, encoder_hidden = self.encoder_model(batch)

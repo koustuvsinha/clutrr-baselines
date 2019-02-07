@@ -27,6 +27,7 @@ model:
   name: baseline1
   batch_size: 100
   num_epochs: 20
+  num_entity_block: 20
   persist_per_epoch: -1
   early_stopping_patience: 1
   save_dir: ''
@@ -44,6 +45,13 @@ model:
     should_use_pretrained_embedding: false
     should_finetune_embedding: true
     pretrained_embedding_path: w2v/w2v_sst.txt
+    # define policy of choosing entity embedding
+    # if entity_embedding_policy :
+    #       1. random, then just assign random values to entity embeddings per run
+    #       2. learned, then learn the entity embeddings, but since we are randomizing entity
+    #                              assignments in data this would not be an issue
+    #       3. fixed, then set aside k random values for the entities and keep them fixed after each run
+    entity_embedding_policy: random
   optimiser:
     name: adam
     learning_rate: 0.001
@@ -59,7 +67,6 @@ model:
     dropout: 0
     pooling: maxpool # can be attention or maxpool
     tmp_name: codes.models.gnn.encoder.GraphEncoder
-    invalidate_embeddings: True
   decoder:
     name: codes.baselines.lstm.basic.SimpleDecoder
     hidden_dim: 200

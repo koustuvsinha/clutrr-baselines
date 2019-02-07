@@ -81,7 +81,7 @@ def run_experiment(config, exp, resume=False):
     logging.info("Target size : {}".format(target_size))
     config.model.vocab_size = vocab_size
     config.model.target_size = target_size
-    config.model.max_nodes = data_util.max_ents
+    config.model.max_nodes = config.model.num_entity_block
     config.model.max_sent_length = data_util.max_sent_length
 
     logging.info("Loading testing data")
@@ -132,7 +132,7 @@ def run_experiment(config, exp, resume=False):
     if config.general.mode == 'train':
         _run_epochs(experiment)
     else:
-        _run_one_epoch_all_modes(experiment, only_infer=True)
+        _run_one_epoch_test(experiment)
 
 
 def _run_epochs(experiment):
@@ -141,12 +141,10 @@ def _run_epochs(experiment):
     config = experiment.config
     for key in validation_metrics_dict:
         validation_metrics_dict[key].reset()
-    test_acc_per_epoch = []
     while experiment.epoch_index <= config.model.num_epochs:
         experiment.epoch_index += 1
         logging.info("Epoch {}".format(experiment.epoch_index))
-        test_accs = _run_one_epoch_all_modes(experiment)
-        test_acc_per_epoch.append(test_accs)
+        _run_one_epoch_train_val(experiment)
         for scheduler in experiment.schedulers:
             if config.model.scheduler_type == "exp":
                 scheduler.step()
@@ -155,39 +153,44 @@ def _run_epochs(experiment):
         if config.model.persist_per_epoch > 0 and experiment.epoch_index % config.model.persist_per_epoch == 0:
             experiment.model.save_model(epochs=experiment.epoch_index, optimizers=experiment.optimizers)
     else:
+        test_accs = _run_one_epoch_test(experiment)
         best_epoch_index = experiment.epoch_index - validation_metrics_dict[metric_to_perform_early_stopping].counter
         write_metadata_logs(best_epoch_index=best_epoch_index)
         print("Best performing model corresponds to epoch id {}".format(best_epoch_index))
         for key, value in validation_metrics_dict.items():
             print("{} of the best performing model = {}".format(
                 key, value.get_best_so_far()))
-        print("Test score corresponding to best performing epoch id {}".format(best_epoch_index))
-        print(', '.join(test_acc_per_epoch[best_epoch_index - 1]))
+        print("Best performing epoch id {}".format(best_epoch_index))
+        #print("Test score corresponding to best performing epoch id {}".format(best_epoch_index))
+        #print(', '.join(test_acc_per_epoch[best_epoch_index - 1]))
 
 
 
-def _run_one_epoch_all_modes(experiment, only_infer=False):
-    if not only_infer:
-        if (experiment.dataloaders.train):
-            with experiment.comet_ml.train():
-                _run_one_epoch(experiment.dataloaders.train, experiment,
-                               mode="train",
-                               filename=experiment.config.dataset.train_file)
-        if (experiment.dataloaders.val):
-            with experiment.comet_ml.validate():
-                _run_one_epoch(experiment.dataloaders.val, experiment,
-                               mode="val",
-                               filename=experiment.config.dataset.train_file)
+def _run_one_epoch_train_val(experiment):
+    if (experiment.dataloaders.train):
+        with experiment.comet_ml.train():
+            _run_one_epoch(experiment.dataloaders.train, experiment,
+                           mode="train",
+                           filename=experiment.config.dataset.train_file)
+    if (experiment.dataloaders.val):
+        with experiment.comet_ml.validate():
+            _run_one_epoch(experiment.dataloaders.val, experiment,
+                           mode="val",
+                           filename=experiment.config.dataset.train_file)
+
+def _run_one_epoch_test(experiment):
     test_accs = []
     if len(experiment.dataloaders.test) > 0:
         with experiment.comet_ml.test():
             for di, dataloader in enumerate(experiment.dataloaders.test):
                 _, acc = _run_one_epoch(dataloader, experiment, mode="test",
-                               filename=experiment.config.dataset.test_files[di])
-                test_accs.append(str(acc))
+                                        filename=experiment.config.dataset.test_files[di])
+                test_accs.append(acc)
     logging.info("------------------------")
-    logging.info("> Test accuracies: {}".format(' ,'.join(test_accs)))
+    logging.info("> Test accuracies: {}".format(' ,'.join([str(t) for t in test_accs])))
+    logging.info("> Mean test accuracy : {}".format(np.mean(test_accs)))
     return test_accs
+
 
 
 def _run_one_epoch(dataloader, experiment, mode, filename=''):
