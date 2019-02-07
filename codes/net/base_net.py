@@ -225,5 +225,6 @@ class Net(nn.Module):
                 self.embedding.weight.size()).to(self.embedding.weight.device))
             entity_mask = (1 - mask)
             # check for padding
-            entity_mask[0] = 0.0
-            self.embedding.weight.mul_(mask).add_(entity_mask * random_weights)
+            entity_mask[0].fill_(0.0)
+            self.embedding.weight.mul_(mask)
+            self.embedding.weight = nn.Parameter(self.embedding.weight + random_weights.mul_(entity_mask))
