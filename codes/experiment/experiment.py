@@ -96,10 +96,11 @@ def run_experiment(config, exp, resume=False):
     experiment.data_util = data_util
     experiment.dataloaders.train = data_util.get_dataloader(mode='train')
     experiment.dataloaders.val = data_util.get_dataloader(mode='val')
-    experiment.dataloaders.test = []
-    for test_file in config.dataset.test_files:
-        experiment.dataloaders.test.append(data_util.get_dataloader(mode='test',
-                                                                    test_file=test_file))
+    experiment.dataloaders.test = {}
+    for test_file in sorted(config.dataset.test_files):
+        test_rel = int(test_file.split('_test.csv')[0].split('.')[-1])
+        experiment.dataloaders.test[test_rel] = { 'dl': data_util.get_dataloader(mode='test',
+                                                    test_file=test_file), 'file': test_file}
 
     experiment.model.encoder, experiment.model.decoder = choose_model(config)
     experiment.model.encoder = experiment.model.encoder.to(device)
@@ -183,9 +184,12 @@ def _run_one_epoch_test(experiment):
     test_accs = []
     if len(experiment.dataloaders.test) > 0:
         with experiment.comet_ml.test():
-            for di, dataloader in enumerate(experiment.dataloaders.test):
+            for test_rel, dlo in experiment.dataloaders.test.items():
+                dataloader = dlo['dl']
+                test_file = dlo['file']
                 _, acc = _run_one_epoch(dataloader, experiment, mode="test",
-                                        filename=experiment.config.dataset.test_files[di])
+                                        filename=test_file)
+                experiment.comet_ml.log_metric("test_acc", acc, step=test_rel)
                 test_accs.append(acc)
     logging.info("------------------------")
     logging.info("> Test accuracies: {}".format(' ,'.join([str(t) for t in test_accs])))
