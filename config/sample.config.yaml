@@ -39,7 +39,7 @@ model:
   query_entities: 2
   early_stopping:
     patience: 3
-    metric_to_track: loss
+    metric_to_track: val_loss
   embedding:
     dim: 100
     should_use_pretrained_embedding: false
@@ -114,7 +114,7 @@ model:
       dim_1: 256
       dim_2: 512
   mac:
-    num_cell: 12
+    num_iteration: 12
     dropout:
       memory: 0.1
       read: 0.1

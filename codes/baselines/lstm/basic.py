@@ -130,8 +130,9 @@ class SimpleDecoder(Net):
         _, seq_len, dim = encoder_outputs.size()
         if self.model_config.loss_type == 'classify':
             if self.attn_module:
-                # print('+++++++++++++++', query_rep.shape)
-                # print('+++++++++++++++', encoder_outputs.shape)
+                # print('----query_rep shape:', query_rep.shape)
+                # print('----encoder_outputs shape', encoder_outputs.shape)
+                # print('----hidden rep shape', batch.encoder_hidden[0].shape)
                 weighted_encoder_outputs = self.attn_module(query_rep, encoder_outputs)
                 # print('+++++++++++++++', weighted_encoder_outputs.shape)
                 # print('+++++++++++++++', encoder_outputs[:, -1, :].shape)
