@@ -111,15 +111,15 @@ class SimpleDecoder(Net):
         num_ents = query_mask.size(2)
         seq_len = query_mask.size(1)
         # encoder_outputs # B x seq_len x dim
-        query_mask = query_mask.transpose(1,2) # B x num_ents x seq_len
+        query_mask = query_mask.transpose(1, 2) # B x num_ents x seq_len
 
         query_rep = torch.bmm(query_mask.float(), encoder_outputs) # B x num_ents x dim
-        query_rep = query_rep.transpose(1,2) # B x dim x num_ents
+        query_rep = query_rep.transpose(1, 2) # B x dim x num_ents
         hidden_size = self.model_config.encoder.hidden_dim
         ents = query_rep.size(-1)
         query_reps = []
         for i in range(ents):
-            query_reps.append(query_rep.transpose(1,2)[:,i,:].unsqueeze(1))
+            query_reps.append(query_rep.transpose(1, 2)[:, i, :].unsqueeze(1))
         query_rep = torch.cat(query_reps, -1)
         return query_rep
 

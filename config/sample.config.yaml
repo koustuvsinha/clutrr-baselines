@@ -113,6 +113,13 @@ model:
     f_theta:
       dim_1: 256
       dim_2: 512
+  mac:
+    num_cell: 12
+    dropout:
+      memory: 0.1
+      read: 0.1
+      write: 0.1
+
 log:
   file_path: ''
   logs_per_epoch: 50
