@@ -39,7 +39,7 @@ class MACNetworkEncoder(Net):
         self.iteration = model_config.mac.num_iteration
 
         # memory & control size
-        base_mac_size = model_config.encoder.hidden_size
+        base_mac_size = model_config.encoder.hidden_dim
         bidirectional_mult = 1
         if model_config.encoder.bidirectional:
             bidirectional_mult = 2
@@ -59,7 +59,7 @@ class MACNetworkEncoder(Net):
                 query_rep:      B x num_ents*dim
                 query_rep_all:  B x num_ents x dim
         """
-        encoder_outputs, query_mask = batch.encoder_outputs, batch.query_mask
+        encoder_outputs, query_mask = batch.knowledgeBase, batch.query_mask
         # expand
         num_ents = query_mask.size(2)
         seq_len = query_mask.size(1)
@@ -72,7 +72,7 @@ class MACNetworkEncoder(Net):
         for i in range(ents):
             query_reps.append(query_rep_all[:, i, :].unsqueeze(1))
 
-        query_rep = torch.cat(query_reps, -1)
+        query_rep = torch.cat(query_reps, -1).squeeze(1)
 
         return query_rep, query_rep_all
 
@@ -80,6 +80,7 @@ class MACNetworkEncoder(Net):
     def forward(self, batch):
         # Input Unit
         knowledgeBase, _ = self.paragraphReader(batch)
+        batch.knowledgeBase = knowledgeBase
         query_rep, query_rep_all = self.calculate_query(batch)
         batch.query_rep = query_rep
 
@@ -97,9 +98,9 @@ class MACNetworkDecoder(Net):
     Output Unit of MAC Network, which is an MLP.
     """
     def __init__(self, model_config, share_embeddings=None):
-        super(MACNetworkDecoder, self).__init(model_config)
+        super(MACNetworkDecoder, self).__init__(model_config)
 
-        base_enc_dim = model_config.encoder.hidden_size
+        base_enc_dim = model_config.encoder.hidden_dim
         if model_config.encoder.bidirectional:
             base_enc_dim *= 2
         query_rep = base_enc_dim * model_config.decoder.query_ents
@@ -111,8 +112,7 @@ class MACNetworkDecoder(Net):
 
         query_rep = batch.query_rep
         enc_outputs = batch.encoder_outputs
-
-        out = self.output_unit(torch.cat([query_rep.squeeze(1), enc_outputs]))
+        out = self.output_unit(torch.cat([query_rep, enc_outputs], -1))
         return out, None, None
 
     def init_hidden(self, encoder_outputs, batch_size):
@@ -245,8 +245,15 @@ class MACCell(Net):
 
 
     def forward(self, knowledgeBase, query_rep, query_rep_all, memory, control):
+        # print('@@@@@knowledgeBase:\t', knowledgeBase.shape)
+        # print('@@@@@query_rep:\t', query_rep.shape)
+        # print('@@@@@query_rep_all:\t', query_rep_all.shape)
+        # print('@@@@@memory:\t', memory.shape)
+        # print('@@@@@control:\t', control.shape)
 
-        newCtrl, newContCtrl = self.control(query_rep, query_rep_all, control)
+        transformedQuery = self.transformQuestion(query_rep)
+
+        newCtrl, newContCtrl = self.control(transformedQuery, query_rep_all, control)
         newInfo = self.read(knowledgeBase, memory, newCtrl)
         newMemory = self.write(memory, newInfo, newCtrl)
 
