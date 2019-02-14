@@ -39,14 +39,12 @@ class MACNetworkEncoder(Net):
         self.iteration = model_config.mac.num_iteration
 
         # memory & control size
-        base_mac_size = model_config.encoder.hidden_dim
-        bidirectional_mult = 1
+        self.mac_size = model_config.encoder.hidden_dim
         if model_config.encoder.bidirectional:
-            bidirectional_mult = 2
-        mac_size = base_mac_size * bidirectional_mult
+            self.mac_size *= 2
 
         # MAC Cell
-        self.MAC = MACCell(model_config, mac_size)
+        self.MAC = MACCell(model_config, self.mac_size, self.iteration)
 
 
     def calculate_query(self, batch):
@@ -87,9 +85,9 @@ class MACNetworkEncoder(Net):
         # MAC Unit
         batch_size = knowledgeBase.size(0)
         memory, control = self.MAC.init_state(batch_size)
-        for _ in range(self.iteration):
-            memory, control = self.MAC(knowledgeBase, query_rep, query_rep_all, memory, control)
-
+        for i in range(self.iteration):
+            memory, control = self.MAC(knowledgeBase, query_rep, query_rep_all, memory, control, i)
+        # encoder return: encoder_output, encoder_hidden
         return memory, None
 
 
@@ -126,12 +124,12 @@ class MACNetworkDecoder(Net):
 class MACCell(Net):
 
     # TODO
-    def __init__(self, model_config, hidden_size):
+    def __init__(self, model_config, hidden_size, iteration):
         super(MACCell, self).__init__(model_config)
 
         self.model_config = model_config
         self.hidden_size = hidden_size
-
+        self.iteration = iteration
 
         base_enc_dim = model_config.embedding.dim
         if model_config.encoder.bidirectional:
@@ -140,11 +138,13 @@ class MACCell(Net):
 
         # linear transformate query_rep into a position-aware vector
         # B, 2*dim -> B, dim
-        self.transformQuestion = self.get_mlp(query_rep_dim,
-                                               hidden_size, num_layers=2)
+        self.transformQuestion_1 = nn.Linear(query_rep_dim, hidden_size)
+        self.transformQuestion_2 = [nn.Linear(hidden_size, hidden_size) for i in range(iteration)]
 
         # ---Control Unit
         self.contControl = nn.Linear(hidden_size*2, hidden_size)
+        # optional, concate interaction and query_rep of each entities (2*dim), then project back to dim
+        self.controlProj = nn.Linear(hidden_size*2, hidden_size)
         self.controlAttn = nn.Linear(hidden_size, 1)
 
         # Read Unit
@@ -156,15 +156,13 @@ class MACCell(Net):
         # Write Unit
         self.writeNewMemory = self.get_mlp(hidden_size*2, hidden_size, num_layers=1)
 
-    # TODO
+
     def init_state(self, batch_size):
+
         # self.c = nn.Parameter(torch.rand(hidden_size))
         # self.m = nn.Parameter(torch.rand(hidden_size))
-
         initMemory = torch.rand(batch_size, self.hidden_size)
         initCtrl = torch.rand(batch_size, self.hidden_size)
-
-
         return initMemory, initCtrl
 
 
@@ -196,9 +194,9 @@ class MACCell(Net):
             interactions = self.controlProj(interactions)                 # B x entity_num x dim
 
         # compute attn distribution
-        logits = self.controlAttn(interactions)                # B x entity_num x 1
-        attn_weight = F.softmax(logits, dim=1)                  # B x entity_num x 1
-        newCtrl = (attn_weight * query_rep_all).sum(dim=1).squeeze(1)  # B x dim
+        attnLogit = self.controlAttn(interactions)                # B x entity_num x 1
+        attnWeight = F.softmax(attnLogit, dim=1)                  # B x entity_num x 1
+        newCtrl = (attnWeight * query_rep_all).sum(dim=1).squeeze(1)  # B x dim
 
         return newCtrl, newContCtrl
 
@@ -216,12 +214,12 @@ class MACCell(Net):
 
         # 2. combine and linearly transform new and old knowledge
         combinedInfo = self.combineInfo(torch.cat([mem_KB, knowledgeBase], dim=-1))  # B x T x dim
+        interactions = torch.unsqueeze(curControl, 1) * combinedInfo
 
         # 3. attn, query: ctrl, key: retrievedInfo, value: KB
-        attnWeight = self.readAttn(curControl.unsqueeze(1) * combinedInfo)      # B x T x dim
-        attnLogits = torch.softmax(attnWeight, dim=1)
-
-        newInfo = (attnLogits * knowledgeBase).sum(dim=1).squeeze(1)
+        attnLogit = self.readAttn(interactions)             # B x T x dim
+        attnWeight = torch.softmax(attnLogit, dim=1)        # B x T x dim
+        newInfo = (attnWeight * knowledgeBase).sum(dim=1).squeeze(1)  # B x dim
 
         return newInfo
 
@@ -237,24 +235,28 @@ class MACCell(Net):
         :return:
             new memory [B, dim]
         """
-
         newMemory = torch.cat([info, memory], dim=1)    # B x 2*dim
         newMemory = self.writeNewMemory(newMemory)      # B x dim
 
         return newMemory
 
 
-    def forward(self, knowledgeBase, query_rep, query_rep_all, memory, control):
+    def forward(self, knowledgeBase, query_rep, query_rep_all, memory, control, i):
+
         # print('@@@@@knowledgeBase:\t', knowledgeBase.shape)
         # print('@@@@@query_rep:\t', query_rep.shape)
         # print('@@@@@query_rep_all:\t', query_rep_all.shape)
         # print('@@@@@memory:\t', memory.shape)
         # print('@@@@@control:\t', control.shape)
 
-        transformedQuery = self.transformQuestion(query_rep)
-
+        # transform query_rep to point-wise question_rep
+        transformedQuery = self.transformQuestion_1(query_rep).tanh()            # 2*hidden_size -> hidden_size
+        transformedQuery = self.transformQuestion_2[i](transformedQuery)  # hidden_size -> hidden_size
+        # CONTROL unit
         newCtrl, newContCtrl = self.control(transformedQuery, query_rep_all, control)
+        # READ unit
         newInfo = self.read(knowledgeBase, memory, newCtrl)
+        # WRITE unit
         newMemory = self.write(memory, newInfo, newCtrl)
 
         return newMemory, newCtrl
