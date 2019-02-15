@@ -84,7 +84,7 @@ class MACNetworkEncoder(Net):
 
         # MAC Unit
         batch_size = knowledgeBase.size(0)
-        memory, control = self.MAC.init_state(batch_size)
+        memory, control = self.MAC.init_state(batch, batch_size)
         for i in range(self.iteration):
             memory, control = self.MAC(knowledgeBase, query_rep, query_rep_all, memory, control, i)
         # encoder return: encoder_output, encoder_hidden
@@ -139,7 +139,7 @@ class MACCell(Net):
         # linear transformate query_rep into a position-aware vector
         # B, 2*dim -> B, dim
         self.transformQuestion_1 = nn.Linear(query_rep_dim, hidden_size)
-        self.transformQuestion_2 = [nn.Linear(hidden_size, hidden_size) for i in range(iteration)]
+        self.transformQuestion_2 = nn.ModuleList([nn.Linear(hidden_size, hidden_size) for i in range(iteration)])
 
         # ---Control Unit
         self.contControl = nn.Linear(hidden_size*2, hidden_size)
@@ -157,12 +157,12 @@ class MACCell(Net):
         self.writeNewMemory = self.get_mlp(hidden_size*2, hidden_size, num_layers=1)
 
 
-    def init_state(self, batch_size):
+    def init_state(self, batch, batch_size):
 
         # self.c = nn.Parameter(torch.rand(hidden_size))
         # self.m = nn.Parameter(torch.rand(hidden_size))
-        initMemory = torch.rand(batch_size, self.hidden_size)
-        initCtrl = torch.rand(batch_size, self.hidden_size)
+        initMemory = torch.rand(batch_size, self.hidden_size).to(batch.inp.device)
+        initCtrl = torch.rand(batch_size, self.hidden_size).to(batch.inp.device)
         return initMemory, initCtrl
 
 
