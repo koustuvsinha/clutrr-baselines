@@ -134,10 +134,11 @@ class GatEncoder(Net):
         data = batch.geo_batch
         x = self.embedding(data.x).squeeze(1) # N x node_dim
         edge_attr = self.edge_embedding(data.edge_attr).squeeze(1) # E x edge_dim
-        x = F.dropout(x, p=0.6, training=self.training)
-        x = F.elu(self.att1(x, data.edge_index, edge_attr))
-        x = F.dropout(x, p=0.6, training=self.training)
-        x = self.att2(x, data.edge_index, edge_attr)
+        for nr in range(self.model_config.graph.num_message_rounds):
+            x = F.dropout(x, p=0.6, training=self.training)
+            x = F.elu(self.att1(x, data.edge_index, edge_attr))
+            x = F.dropout(x, p=0.6, training=self.training)
+            x = self.att2(x, data.edge_index, edge_attr)
         # restore x into B x num_node x dim
         chunks = torch.split(x, batch.geo_slices, dim=0)
         chunks = [p.unsqueeze(0) for p in chunks]
