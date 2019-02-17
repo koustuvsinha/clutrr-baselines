@@ -194,7 +194,7 @@ class Net(nn.Module):
         Only use this when loading embeddings
         :return:
         """
-        self.embedding.requies_grad = False
+        self.embedding.requires_grad = False
 
     def get_entity_mask(self, ids, entity_id=0, mode='max'):
         """
@@ -212,7 +212,7 @@ class Net(nn.Module):
         mask = mask.to(self.embedding.weight.device)
         return mask.float()
 
-    def randomize_entity_embeddings(self, fixed=False):
+    def randomize_entity_embeddings(self, fixed=False, padding=True):
         """
         Randomize the entity embeddings.
         At each epoch, randomize the entity embeddings
@@ -232,7 +232,8 @@ class Net(nn.Module):
                     self.embedding.weight.size()).to(self.embedding.weight.device))
             entity_mask = (1 - mask)
             # check for padding
-            entity_mask[0].fill_(0.0)
+            if padding:
+                entity_mask[0].fill_(0.0)
             self.embedding.weight.mul_(mask)
             self.embedding.weight.add_(random_weights.mul_(entity_mask))
             self.random_weights = torch.tensor(random_weights)

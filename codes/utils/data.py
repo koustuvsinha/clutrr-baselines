@@ -15,7 +15,10 @@ from codes.utils.config import get_config
 import os
 import json
 from ast import literal_eval as make_tuple
+from torch_geometric.data import Data as GeometricData
+from torch_geometric.data import Batch as GeometricBatch
 import random
+from itertools import repeat, product
 import logging
 logging.basicConfig(
     level=logging.INFO,
@@ -41,6 +44,10 @@ class DataRow():
         self.target = None
         self.text_target = None
         self.story_graph = None
+        # new variables to only contain the clean graph for Exp 3
+        self.story_edges = None
+        self.edge_types = None
+        self.query_edge = None
 
 
 class DataUtility():
@@ -102,11 +109,13 @@ class DataUtility():
         self.dummy_entity = '' # return this entity when UNK entity
         self.load_dictionary = config.dataset.load_dictionary
         self.max_sent_length = 0
+        self.unique_edge_dict = {}
         # check_data flags
         self.data_has_query = False
         self.data_has_text_query = False
         self.data_has_target = False
         self.data_has_text_target = False
+        self.data_has_raw_graph = False
         self.preprocessed = set() # set of puzzle ids which has been preprocessed
         self.max_sent_length = 0
         self.max_word_length = 0
@@ -193,6 +202,8 @@ class DataUtility():
             self.data_has_text_query = True
         else:
             data['text_query'] = ''
+        if "story_edges" in list(data.columns) and "edge_types" in list(data.columns) and "query_edge" in list(data.columns):
+            self.data_has_raw_graph = True
         return data
 
     def process_entities(self, data, placeholder='[]'):
@@ -286,6 +297,15 @@ class DataUtility():
                 dataRow.query = row['query']
             if self.data_has_target:
                 dataRow.target = self.target_word2id[row['target']]
+            if self.data_has_raw_graph:
+                # add the raw graph and edge ids
+                dataRow.story_edges = list(make_tuple(row['story_edges']))
+                dataRow.edge_types = make_tuple(row['edge_types'])
+                dataRow.query_edge = make_tuple(row['query_edge'])
+                for et in dataRow.edge_types:
+                    if et not in self.unique_edge_dict:
+                        self.unique_edge_dict[et] = len(self.unique_edge_dict)
+
             if mode == 'train':
                 self.dataRows[mode][dataRow.id] = dataRow
             else:
@@ -608,8 +628,26 @@ class SequenceDataLoader(data.Dataset):
         text_target = [START_TOKEN] + self.dataRows[index].text_target + [END_TOKEN]
         text_target = [self.data.get_token(tp) for tp in text_target]
 
+        # clean graphs for GAT
+        edge_list = self.dataRows[index].story_edges # eg, [(0, 1), (1, 2), (2, 3)]
+        edge_index = list(zip(*edge_list))  # eg, [[0, 1, 2], [1, 2, 3]]
+        edge_index = torch.LongTensor(edge_index) # 2 x num_edges
+        edge_types = self.dataRows[index].edge_types
+        num_ue = len(self.data.unique_edge_dict)
+        num_e = len(edge_list)
+        edge_attr = torch.zeros(num_e, 1).long() # [num_edges, 1]
+        # create a one-hot vector for each edge type
+        for i,e in enumerate(edge_types):
+            edge_attr[i][0] = self.data.unique_edge_dict[e]
+        nodes = list(set([p for x in edge_list for p in x]))
+        x = torch.arange(len(nodes)).unsqueeze(1) # num_nodes x 1
+
+        geo_data = {'x':x, 'edge_index':edge_index, 'edge_attr':edge_attr, 'y':torch.tensor(target), 'num_nodes':len(nodes)}
+        query_edge = [self.dataRows[index].query_edge]
+        num_nodes = [len(nodes)]
+
         return inp_row, inp_ents, query, text_query, query_mask, target, text_target, inp_row_graph, \
-               sent_lengths, inp_ent_mask, sentence_pointer, orig_inp, inp_row_pos
+               sent_lengths, inp_ent_mask, geo_data, query_edge, num_nodes, sentence_pointer, orig_inp, inp_row_pos
 
     def __flatten__(self, arr):
         if any(isinstance(el, list) for el in arr):
@@ -650,15 +688,23 @@ def collate_fn(data):
     """
     ## sort dataset by inp sentences
     data.sort(key=lambda x: len(x[0]), reverse=True)
-    inp_data, inp_ents, query, text_query, query_mask, target, text_target, inp_graphs, sent_lengths, inp_ent_mask, *_ = zip(*data)
+    inp_data, inp_ents, query, text_query, query_mask, target, text_target, inp_graphs, sent_lengths, inp_ent_mask, geo_data, query_edge, num_nodes, *_ = zip(*data)
     inp_data, inp_lengths = simple_merge(inp_data)
     # outp_data, outp_lengths = simple_merge(outp_data)
     text_target, text_target_lengths = simple_merge(text_target)
 
-    # outp_data = outp_data.view(-1, outp_data.shape[2]) no need to reshape now, will do it later
     query = torch.LongTensor(query)
     query_mask = pad_ents(query_mask, inp_lengths)
     target = torch.LongTensor(target)
+    #geo_data_col, geo_data_slices = collate_geometric(geo_data)
+    slices = [p for n in num_nodes for p in n]
+    max_node = max(slices)
+    # add extra node to all graphs in order to have padding
+    geo_data = [GeometricData(x=torch.arange(max_node).unsqueeze(1), edge_index=gd['edge_index'], edge_attr=gd['edge_attr'], y=gd['y']) for gd in geo_data]
+    geo_batch = GeometricBatch.from_data_list(geo_data)
+    # update the slices - same number of nodes
+    slices = [max_node for s in slices]
+    query_edge = torch.LongTensor(query_edge)
 
     # prepare batch
     batch = Batch(
@@ -672,7 +718,10 @@ def collate_fn(data):
         query=query,
         query_mask=query_mask,
         inp_graphs=torch.LongTensor(inp_graphs),
-        inp_ent_mask = torch.LongTensor(inp_ent_mask)
+        inp_ent_mask = torch.LongTensor(inp_ent_mask),
+        geo_batch=geo_batch,
+        query_edge=query_edge,
+        geo_slices=slices
     )
 
     return batch
@@ -794,6 +843,28 @@ def pad_sent_lengths(sent_lens):
         pad_lens.append(sent + [0]*(max_len - len(sent)))
     return pad_lens
 
+def collate_geometric(data_list):
+    r"""Collates a python list of data objects to the internal storage
+    format of :class:`torch_geometric.data.InMemoryDataset`."""
+    keys = data_list[0].keys
+    data = GeometricData()
+
+    for key in keys:
+        data[key] = []
+    slices = {key: [0] for key in keys}
+
+    for item, key in product(data_list, keys):
+        data[key].append(item[key])
+        s = slices[key][-1] + item[key].size(item.cat_dim(key, item[key]))
+        slices[key].append(s)
+
+    for key in keys:
+        data[key] = torch.cat(
+            data[key], dim=data_list[0].cat_dim(key, data_list[0][key]))
+        slices[key] = torch.LongTensor(slices[key])
+
+    return data, slices
+
 def generate_dictionary(config):
     """
     Before running an experiment, make sure that a dictionary
@@ -844,7 +915,7 @@ if __name__ == '__main__':
     # experiments
     # Take the last training file which has the longest path and make a dictionary
     parent_dir = os.path.abspath(os.pardir).split('/codes')[0]
-    config = get_config(config_id='lstm')
+    config = get_config(config_id='gat_clean')
     generate_dictionary(config)
 
 

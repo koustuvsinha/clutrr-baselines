@@ -25,6 +25,9 @@ class Batch:
             config = None,
             orig_inp = None,            # Unmodified input
             inp_row_pos = None,         # position over input text (B x s x w)
+            geo_batch = None,           # Pytorch Geometric Batch object (collection of Pytorch Data objects),
+            geo_slices = None,          # Pytorch Geometric slices, to restore the original splits
+            query_edge = None,          # tensor B x 2 of query edges
             ):
 
         """
@@ -71,6 +74,9 @@ class Batch:
         self.sentence_pointer = sentence_pointer
         self.orig_inp = orig_inp
         self.inp_row_pos = inp_row_pos
+        self.geo_batch = geo_batch
+        self.geo_slices = geo_slices
+        self.query_edge = query_edge
 
     def to_device(self, device):
         self.inp = self.inp.to(device)
@@ -86,6 +92,10 @@ class Batch:
             self.inp_row_pos = self.inp_row_pos.to(device)
         if self.sentence_pointer is not None:
             self.sentence_pointer = self.sentence_pointer.to(device)
+        if self.geo_batch is not None:
+            self.geo_batch = self.geo_batch.to(device)
+        if self.query_edge is not None:
+            self.query_edge = self.query_edge.to(device)
 
     def process_adj_mat(self):
         """

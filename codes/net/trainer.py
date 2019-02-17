@@ -25,10 +25,13 @@ class Trainer:
         self.decoder_model = decoder_model
         self.encoder_model.max_entity_id = max_entity_id
         self.decoder_model.max_entity_id = max_entity_id
+        self.padding = True
+        if model_config.name == 'graph':
+            self.padding = False
         # initialize embeddings
         if self.model_config.embedding.entity_embedding_policy in ['random','fixed']:
             # randomize the entity embeddings first time
-            self.encoder_model.randomize_entity_embeddings()
+            self.encoder_model.randomize_entity_embeddings(padding=self.padding)
         else:
             print("Learning entity embeddings")
         loss_criteria = model_config.loss_criteria
@@ -81,10 +84,10 @@ class Trainer:
         # choose a policy of invalidating entity embeddings here
         if self.model_config.embedding.entity_embedding_policy == 'random':
             # randomize the entity embeddings at each epoch
-            self.encoder_model.randomize_entity_embeddings()
+            self.encoder_model.randomize_entity_embeddings(padding=self.padding)
         if self.model_config.embedding.entity_embedding_policy == 'fixed':
             # fix the random entity embeddings which were used before
-            self.encoder_model.randomize_entity_embeddings(fixed=True)
+            self.encoder_model.randomize_entity_embeddings(fixed=True, padding=self.padding)
 
         # run the encoder
         encoder_outputs, encoder_hidden = self.encoder_model(batch)
