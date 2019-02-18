@@ -238,6 +238,9 @@ def _run_one_epoch(dataloader, experiment, mode, filename=''):
         batch_loss = loss.item()
         if (should_train):
             loss.backward()
+            clip = experiment.config.model.optimiser.clip
+            torch.nn.utils.clip_grad_norm_(experiment.model.encoder.parameters(), clip)
+            torch.nn.utils.clip_grad_norm_(experiment.model.decoder.parameters(), clip)
             for optimizer in optimizers:
                 optimizer.step()
         aggregated_batch_loss += (batch_loss * batch.batch_size)
