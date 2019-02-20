@@ -6,3 +6,10 @@ inflect
 networkx
 pandas
 tqdm
+comet_ml
+torch
+torch-scatter
+torch-sparse
+torch-cluster
+torch-spline-conv
+torch-geometric

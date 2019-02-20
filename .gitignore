@@ -120,3 +120,6 @@ plots/*
 !plots/.gitkeep
 model/*
 data/*
+codes/runs/
+codes/*.sh
+*.zip

@@ -221,15 +221,13 @@ class DataUtility():
                 ents = re.findall('\[(.*?)\]', story)
                 uniq_ents = set(ents)
                 uniq_ents = random.sample(list(uniq_ents), len(uniq_ents))
-                if len(uniq_ents) > max_ents:
-                    max_ents = len(uniq_ents)
                 pid = row['id']
                 query = row['query'] if self.data_has_query else ''
                 query = list(make_tuple(query))
                 text_query = row['text_query'] if self.data_has_text_query else ''
                 text_target = row['text_target'] if self.data_has_text_target else ''
                 entity_map = {}
-                entity_id_block = list(range(0, self.num_entity_block))
+                entity_id_block = list(range(0, len(uniq_ents)))
                 for idx, ent in enumerate(uniq_ents):
                     entity_id = random.choice(entity_id_block)
                     entity_id_block.remove(entity_id)
@@ -248,8 +246,10 @@ class DataUtility():
                 data.at[i, 'query'] = tuple(query)
                 data.at[i, 'entities'] = json.dumps(list(uniq_ents))
                 self.entity_map[pid] = entity_map
+                max_ents = max(max_ents, len(uniq_ents))
         else:
             raise NotImplementedError("Not implemented, should replace with a tokenization policy")
+        self.num_entity_block = max(max_ents, self.num_entity_block)
         return data, max_ents
 
     def preprocess(self, data, mode='train', single_abs_line=True, test_file=''):

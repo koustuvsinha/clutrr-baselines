@@ -54,7 +54,7 @@ if __name__ == '__main__':
             run_file += "module load intel/2018.3\n"
             run_file += "module load cuda/10.0.130\n"
             run_file += "module load cudnn/7.4\n"
-            run_file += "source activate compnli\n"
+            run_file += "source activate gnnlogic\n"
             run_file += "cd /home/***REMOVED***/projects/def-jpineau/***REMOVED***/InferSent-comp/\n"
         run_file += "export COMET_API='{}'\n".format(args.comet_api)
         run_file += "export COMET_WORKSPACE='{}'\n".format(args.comet_workspace)

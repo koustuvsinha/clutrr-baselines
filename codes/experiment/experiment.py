@@ -81,7 +81,7 @@ def run_experiment(config, exp, resume=False):
     logging.info("Target size : {}".format(target_size))
     config.model.vocab_size = vocab_size
     config.model.target_size = target_size
-    config.model.max_nodes = config.model.num_entity_block
+    config.model.max_nodes = data_util.num_entity_block
     config.model.max_sent_length = data_util.max_sent_length
 
     logging.info("Loading testing data")
