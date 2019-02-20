@@ -1,15 +1,16 @@
-from comet_ml import Experiment, ExistingExperiment
+from comet_ml import OfflineExperiment, ExistingExperiment
 from codes.experiment.experiment import run_experiment
 from codes.utils.config import get_config
 from codes.utils.util import set_seed, flatten_dictionary
 from codes.utils.argument_parser import argument_parser
 from addict import Dict
+import os
 import logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
-
+base_path = os.path.dirname(os.path.realpath(__file__)).split('codes')[0]
 
 def start(config, experiment):
     config = Dict(config)
@@ -27,7 +28,7 @@ if __name__ == '__main__':
     if len(exp_id) == 0:
         logging.info("Running new experiment")
         config = get_config(config_id=config_id)
-        ex = Experiment(api_key=config.log.comet.api_key,
+        ex = OfflineExperiment(offline_directory=os.path.join(base_path, 'comet_runs'),
                         workspace=config.log.comet.workspace,
                         project_name=config.log.comet.project_name,
                         disabled=config.log.comet.disabled)
