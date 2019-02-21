@@ -115,11 +115,14 @@ model:
       dim_1: 256
       dim_2: 512
   mac:
-    num_iteration: 12
+    projQuery: false
+    shareQuestion: true     # use the same query projection in all mac iterations
+    num_iteration: 6
+    controlProjAct: false
     dropout:
-      memory: 0.1
-      read: 0.1
-      write: 0.1
+      memory: 0.2
+      read: 0.2
+      write: 0.2
 
 log:
   file_path: ''
