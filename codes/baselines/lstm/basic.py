@@ -170,7 +170,7 @@ class LSTMAttn(nn.Module):
         self.concat_size = concat_size
         if not concat_size:
             self.concat_size = self.hidden_size*3
-        self.attn1 = nn.Linear(self.concat_size, self.hidden_size, bias=False)
+        self.attn1 = nn.Linear(self.concat_size, self.hidden_size)
         print(self.concat_size, self.hidden_size)
         self.attn2 = nn.Linear(self.hidden_size, 1, bias=False)
 

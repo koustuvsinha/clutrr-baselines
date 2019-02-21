@@ -32,18 +32,22 @@ class MACNetworkEncoder(Net):
         else:
             self.embedding = shared_embeddings
 
-        # read unit: paragraph -> list of LSTM outputs
-        self.paragraphReader = SimpleEncoder(model_config, shared_embeddings=self.embedding)
-
-        # how many reasoning step to do
-        self.iteration = model_config.mac.num_iteration
-
         # memory & control size
         self.mac_size = model_config.encoder.hidden_dim
         if model_config.encoder.bidirectional:
             self.mac_size *= 2
 
-        # MAC Cell
+        # how many reasoning step to do
+        self.iteration = model_config.mac.num_iteration
+
+        # 1. read unit: paragraph -> list of LSTM outputs
+        self.reader = SimpleEncoder(model_config, shared_embeddings=self.embedding)
+        # Optionally project query_rep, B x num_ents*dim -> B x dim
+        self.projQuery = None
+        if model_config.mac.projQuery:
+            self.projQuery = nn.Linear(self.mac_size*model_config.decoder.query_ents, self.mac_size)
+
+        # 2. MAC Cell
         self.MAC = MACCell(model_config, self.mac_size, self.iteration)
 
 
@@ -77,9 +81,13 @@ class MACNetworkEncoder(Net):
 
     def forward(self, batch):
         # Input Unit
-        knowledgeBase, _ = self.paragraphReader(batch)
+        knowledgeBase, _ = self.reader(batch)
         batch.knowledgeBase = knowledgeBase
         query_rep, query_rep_all = self.calculate_query(batch)
+
+        if self.projQuery:
+            query_rep = self.projQuery(query_rep)  # B x num_ents*dim -> B x dim
+
         batch.query_rep = query_rep
 
         # MAC Unit
@@ -101,13 +109,15 @@ class MACNetworkDecoder(Net):
         base_enc_dim = model_config.encoder.hidden_dim
         if model_config.encoder.bidirectional:
             base_enc_dim *= 2
-        query_rep = base_enc_dim * model_config.decoder.query_ents
+
+        query_rep = base_enc_dim
+        if not model_config.projQuery:
+            query_rep *= model_config.decoder.query_ents
 
         self.output_unit = self.get_mlp(query_rep + base_enc_dim,
                                         model_config.target_size, num_layers=2)
 
     def forward(self, batch, step_batch):
-
         query_rep = batch.query_rep
         enc_outputs = batch.encoder_outputs
         out = self.output_unit(torch.cat([query_rep, enc_outputs], -1))
@@ -123,7 +133,6 @@ class MACNetworkDecoder(Net):
 
 class MACCell(Net):
 
-    # TODO
     def __init__(self, model_config, hidden_size, iteration):
         super(MACCell, self).__init__(model_config)
 
@@ -131,30 +140,41 @@ class MACCell(Net):
         self.hidden_size = hidden_size
         self.iteration = iteration
 
-        base_enc_dim = model_config.embedding.dim
-        if model_config.encoder.bidirectional:
-            base_enc_dim *= 2
-        query_rep_dim = base_enc_dim * model_config.decoder.query_ents
+        # base_enc_dim = model_config.embedding.dim
+        # if model_config.encoder.bidirectional:
+        #     base_enc_dim *= 2
+        query_rep_dim = hidden_size
+        if not model_config.projQuery:
+            query_rep_dim *= model_config.decoder.query_ents
 
         # linear transformate query_rep into a position-aware vector
         # B, 2*dim -> B, dim
         self.transformQuestion_1 = nn.Linear(query_rep_dim, hidden_size)
-        self.transformQuestion_2 = nn.ModuleList([nn.Linear(hidden_size, hidden_size) for i in range(iteration)])
+        if not model_config.mac.shareQuestion:
+            self.transformQuestion_2 = nn.ModuleList([nn.Linear(hidden_size, hidden_size) for i in range(iteration)])
+        else:
+            self.transformQuestion_2 = nn.Linear(hidden_size, hidden_size)
 
         # ---Control Unit
         self.contControl = nn.Linear(hidden_size*2, hidden_size)
         # optional, concate interaction and query_rep of each entities (2*dim), then project back to dim
         self.controlProj = nn.Linear(hidden_size*2, hidden_size)
+        # control attention
         self.controlAttn = nn.Linear(hidden_size, 1)
 
         # Read Unit
         self.transformMemory = nn.Linear(hidden_size, hidden_size)
         self.transformKB = nn.Linear(hidden_size, hidden_size)
         self.combineInfo = nn.Linear(hidden_size*2, hidden_size)
-        self.readAttn     = nn.Linear(hidden_size, hidden_size)
+        self.readAttn    = nn.Linear(hidden_size, 1)
 
         # Write Unit
         self.writeNewMemory = self.get_mlp(hidden_size*2, hidden_size, num_layers=1)
+
+        # dropout
+        self.memDrop = nn.Dropout(model_config.mac.dropout.memory)
+        self.readDrop = nn.Dropout(model_config.mac.dropout.read)
+        self.writeDrop = nn.Dropout(model_config.mac.dropout.write)
 
 
     def init_state(self, batch, batch_size):
@@ -171,7 +191,7 @@ class MACCell(Net):
         :param query_rep:     [B, dim], concatenation of two query entities after a time-step specific linear transformation
         :param query_rep_all: [B, entity_num, dim] (typically entity_num = 2)
         :param ctrl:          [B, dim], previous control state
-        :param contCtrl:      [B, dim], previous continuous control state (before casting to softmax, optional)
+        :param contCtrl:      [B, dim], previous continuous control state (optional)
         :return ctrl:         [B, dim], new control state
         :return contCtrl:     [B, dim], new continuous control state
         """
@@ -179,7 +199,7 @@ class MACCell(Net):
         n_entity = query_rep_all.size(1)
 
         # 1: compute "continuous" control state given previous control and question.
-        newContCtrl = self.contControl(torch.cat([ctrl, query_rep], -1))  # B x dim
+        newContCtrl = self.contControl(torch.cat([ctrl, query_rep], -1)).tanh()  # B x dim
 
         # 2:   compute attention over query entities and sum them up.
         # 2.1: computer interactions between continuous control state and query entities.
@@ -208,17 +228,29 @@ class MACCell(Net):
         :param curControl:    [B, dim]
         :return: r_i, [B, dim], retrieved info from knowledgeBase
         """
+        if True:
+            prevMemory = self.memDrop(prevMemory)
+
         mem = self.transformMemory(prevMemory)  # B x dim
         KB  = self.transformKB(knowledgeBase)   # B x T x dim
+        if True:
+            mem = self.readDrop(mem)
+            KB  = self.readDrop(KB)
         mem_KB = mem.unsqueeze(1) * KB          # B x T x dim
+
+        if True:
+            mem_KB = mem_KB.relu()
 
         # 2. combine and linearly transform new and old knowledge
         combinedInfo = self.combineInfo(torch.cat([mem_KB, knowledgeBase], dim=-1))  # B x T x dim
         interactions = torch.unsqueeze(curControl, 1) * combinedInfo
 
+        if True:
+            interactions = interactions.relu()
+
         # 3. attn, query: ctrl, key: retrievedInfo, value: KB
-        attnLogit = self.readAttn(interactions)             # B x T x dim
-        attnWeight = torch.softmax(attnLogit, dim=1)        # B x T x dim
+        attnLogit = self.readAttn(interactions)             # B x T x 1
+        attnWeight = torch.softmax(attnLogit, dim=1)        # B x T x 1
         newInfo = (attnWeight * knowledgeBase).sum(dim=1).squeeze(1)  # B x dim
 
         return newInfo
@@ -235,12 +267,14 @@ class MACCell(Net):
         :return:
             new memory [B, dim]
         """
+        if True:
+            info = self.writeDrop(info)
         newMemory = torch.cat([info, memory], dim=1)    # B x 2*dim
         newMemory = self.writeNewMemory(newMemory)      # B x dim
 
         return newMemory
 
-
+    # todo add dropout
     def forward(self, knowledgeBase, query_rep, query_rep_all, memory, control, i):
 
         # print('@@@@@knowledgeBase:\t', knowledgeBase.shape)
@@ -251,11 +285,19 @@ class MACCell(Net):
 
         # transform query_rep to point-wise question_rep
         transformedQuery = self.transformQuestion_1(query_rep).tanh()            # 2*hidden_size -> hidden_size
-        transformedQuery = self.transformQuestion_2[i](transformedQuery)  # hidden_size -> hidden_size
+        if self.model_config.mac.shareQuestion:
+            transformedQuery = self.transformQuestion_2(transformedQuery)
+        else:
+            transformedQuery = self.transformQuestion_2[i](transformedQuery)  # hidden_size -> hidden_size
+
+        if True:
+            transformedQuery = transformedQuery.tanh()
         # CONTROL unit
         newCtrl, newContCtrl = self.control(transformedQuery, query_rep_all, control)
+
         # READ unit
         newInfo = self.read(knowledgeBase, memory, newCtrl)
+
         # WRITE unit
         newMemory = self.write(memory, newInfo, newCtrl)
 

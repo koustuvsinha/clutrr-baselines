@@ -59,6 +59,7 @@ model:
     scheduler_gamma: 1
     scheduler_patience: 10
     l2_penalty: 0
+    clip: 8
   encoder:
     name: codes.baselines.lstm.basic.SimpleEncoder
     hidden_dim: 100
