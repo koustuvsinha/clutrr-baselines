@@ -124,7 +124,7 @@ class GatEncoder(Net):
         torch.nn.init.xavier_uniform_(self.edge_embedding.weight)
 
         self.att1 = EdgeGatConv(model_config.embedding.dim, model_config.graph.message_dim,
-                                model_config.graph.embedding.dim, heads=model_config.graph.num_reads, dropout=0.6)
+                                model_config.embedding.dim, heads=model_config.graph.num_reads, dropout=0.6)
         self.att2 = EdgeGatConv(model_config.graph.message_dim, model_config.embedding.dim, model_config.embedding.dim)
 
     def forward(self, batch):
