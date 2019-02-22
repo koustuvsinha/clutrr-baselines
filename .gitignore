@@ -113,6 +113,13 @@ venv.bak/
 
 .idea/*
 config/*
+# allow the core model params
+!config/bilstm.yaml
+!config/gat_clean.yaml
+!config/lstm_atten.yaml
+!config/mac.yaml
+!config/rn.yaml
+!config/rn_tpr.yaml
 !config/sample.config.yaml
 logs/*
 !logs/.gitkeep

@@ -1,0 +1,126 @@
+---
+general:
+  seed: 42
+  base_path: ''
+  device: cuda:0
+  id: GRAPHSUM1
+  exp_name: default
+  description: Sample code. Does not train any model
+  commit_id: ''
+  mode: train # can be train or infer
+dataset:
+  base_url: http://localhost:9300/
+  data_path: data_c31c3670
+  save_path: dtp.pkl
+  load_save_path: false
+  load_dictionary: false
+  filename: output.csv
+  name: family
+  is_preprocessed: true
+  train_test_split: 0.8
+  train_val_split: 0.8
+  max_vocab: -1
+  tokenization: word
+  common_dict: true
+  sentence_mode: false #sentence mode processes each input story sentence separately. For GNN, this helps to maintaining a node pair -> sentence mapping
+model:
+  name: baseline1
+  batch_size: 100
+  num_epochs: 20
+  num_entity_block: 20
+  persist_per_epoch: -1
+  early_stopping_patience: 1
+  save_dir: ''
+  should_load_model: false
+  dropout_probability: 0
+  tf_ratio: 1
+  loss_criteria: CE
+  loss_type: classify   # set this to classify when performing a classification task, else `seq2seq`
+  query_entities: 2
+  early_stopping:
+    patience: 3
+    metric_to_track: val_loss
+  embedding:
+    dim: 100
+    should_use_pretrained_embedding: false
+    should_finetune_embedding: true
+    pretrained_embedding_path: w2v/w2v_sst.txt
+    # define policy of choosing entity embedding
+    # if entity_embedding_policy :
+    #       1. random, then just assign random values to entity embeddings per epoch
+    #       2. learned, then learn the entity embeddings, but since we are randomizing entity
+    #                              assignments in data this would not be an issue
+    #       3. fixed, then set aside k random values for the entities but do not change them after one epoch
+    entity_embedding_policy: fixed
+  optimiser:
+    name: adam
+    learning_rate: 0.001
+    scheduler_type: exp
+    scheduler_gamma: 1
+    scheduler_patience: 10
+    l2_penalty: 0
+    clip: 1
+  encoder:
+    name: codes.baselines.lstm.basic.SimpleEncoder
+    hidden_dim: 100
+    nlayers: 2
+    bidirectional: true
+    dropout: 0
+    pooling: maxpool # can be attention or maxpool
+    tmp_name: codes.models.gnn.encoder.GraphEncoder
+    invalidate_embeddings: True
+  decoder:
+    name: codes.baselines.lstm.basic.SimpleDecoder
+    hidden_dim: 200
+    nlayers: 2
+    bidirectional: false
+    dropout: 0
+    query_ents: 2
+    tmp_name: codes.models.gnn.decoder.GraphLSTMDecoder
+    use_attention: False  # use attention in classification decoder
+  beam:
+    beam_size: 3
+    alpha: 0
+    beta: 0
+    coverage_penalty: 0
+    length_penalty: 0
+    max_length: 25
+    n_best: 1
+  graph:
+    node_dim: 100
+    message_dim: 100
+    edge_dim: 100
+    pos_rep: random # if random, then use a frozen embedding layer to denote the node position. if one-hot, then use just a one-hot embedding
+    pos_dim: 5 # if above is random, then use this flag
+    feature_dim: 10 # learns graph features
+    num_reads: 1
+    num_message_rounds: 2
+    message_function:
+      num_layers: 2
+      use_attention: True
+      fn_type: edge # either edge or node
+      use_layer_norm: True
+    readout_function:
+      num_layers: 2
+      read_mode: average # can be "only_query", "average" or "attention". When only_query, provide the query ids only. If average, provide query ids along with averaged last state of the graph. If attention, then query along with attentive readout of the graph
+    update_function:
+      num_layers: 2
+      fn_type: lstm # either lstm or mlp
+      use_layer_norm: True
+    edge_embedding: word # if edge_embedding is lstm, then use an lstm to extract the relation, else average word embedding
+    dropout: 0.0
+  rn:
+    g_theta_dim: 265
+    f_theta:
+      dim_1: 256
+      dim_2: 512
+log:
+  file_path: ''
+  logs_per_epoch: 50
+  comet:
+    api_key: ***REMOVED*** # put the comet api key here
+    project_name: clutrr # comet project name
+    workspace: ***REMOVED*** # comet workspace
+    disabled: false # disable when debugging
+plot:
+  base_path: ''
