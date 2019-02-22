@@ -33,7 +33,7 @@ class MACNetworkEncoder(Net):
             self.embedding = shared_embeddings
 
         # memory & control size
-        self.mac_size = model_config.encoder.hidden_dim
+        self.mac_size = model_config.embedding.dim
         if model_config.encoder.bidirectional:
             self.mac_size *= 2
 
@@ -106,7 +106,7 @@ class MACNetworkDecoder(Net):
     def __init__(self, model_config, share_embeddings=None):
         super(MACNetworkDecoder, self).__init__(model_config)
 
-        base_enc_dim = model_config.encoder.hidden_dim
+        base_enc_dim = model_config.embedding.dim
         if model_config.encoder.bidirectional:
             base_enc_dim *= 2
 

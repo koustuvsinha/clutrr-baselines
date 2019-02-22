@@ -62,7 +62,7 @@ class RelationNetworkEncoder(Net):
         else:
             raise NotImplementedError("model.encoder.rn.reader not defined")
 
-        self.g_theta = self.get_mlp_h(model_config.encoder.hidden_dim * bidirectional_mult * 4, model_config.encoder.rn.g_theta_dim,
+        self.g_theta = self.get_mlp_h(model_config.embedding.dim * bidirectional_mult * 4, model_config.encoder.rn.g_theta_dim,
                                       num_layers=4)
         self.f_theta_1 = self.get_mlp_h(model_config.encoder.rn.g_theta_dim, model_config.encoder.rn.f_theta.dim_1, num_layers=1)
         self.f_theta_2 = self.get_mlp_h(model_config.encoder.rn.f_theta.dim_1, model_config.encoder.rn.f_theta.dim_2, num_layers=1)
@@ -84,7 +84,7 @@ class RelationNetworkEncoder(Net):
 
         query_rep = torch.bmm(query_mask.float(), encoder_outputs) # B x num_ents x dim
         query_rep = query_rep.transpose(1,2) # B x dim x num_ents
-        hidden_size = self.model_config.encoder.hidden_dim
+        hidden_size = self.model_config.embedding.dim
         ents = query_rep.size(-1)
         query_reps = []
         for i in range(ents):

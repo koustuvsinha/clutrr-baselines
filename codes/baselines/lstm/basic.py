@@ -22,7 +22,7 @@ class SimpleEncoder(Net):
 
         self.lstm = nn.LSTM(
             model_config.embedding.dim,
-            model_config.encoder.hidden_dim,
+            model_config.embedding.dim,
             model_config.encoder.nlayers,
             bidirectional=model_config.encoder.bidirectional,
             batch_first=True,
@@ -51,43 +51,20 @@ class SimpleDecoder(Net):
         else:
             self.embedding = shared_embeddings
 
-        if model_config.loss_type == 'classify':
-            # set simple MLP classifier
-            base_enc_dim = model_config.embedding.dim
-            if model_config.encoder.bidirectional:
-                base_enc_dim *=2
-            query_rep = base_enc_dim * model_config.decoder.query_ents
+        # set simple MLP classifier
+        base_enc_dim = model_config.embedding.dim
+        if model_config.encoder.bidirectional:
+            base_enc_dim *=2
+        query_rep = base_enc_dim * model_config.decoder.query_ents
 
 
-            input_dim = query_rep + base_enc_dim
-            output_dim = model_config.target_size
-            self.decoder2vocab = self.get_mlp(input_dim, output_dim)
-        else:
-            # set LSTM decoder
-            inp_dim = model_config.embedding.dim
-            if model_config.encoder.bidirectional:
-                inp_dim *= 2
-
-            inp_dim *= model_config.decoder.query_ents
-            inp_dim += model_config.embedding.dim
-
-            self.lstm = nn.LSTM(
-                inp_dim,
-                model_config.decoder.hidden_dim,
-                model_config.decoder.nlayers,
-                bidirectional=model_config.decoder.bidirectional,
-                batch_first=True,
-                dropout=model_config.decoder.dropout
-            )
-
-            self.decoder2vocab = self.get_mlp(
-                model_config.decoder.hidden_dim * self.num_directions,
-                model_config.vocab_size
-            )
+        input_dim = query_rep + base_enc_dim
+        output_dim = model_config.target_size
+        self.decoder2vocab = self.get_mlp(input_dim, output_dim)
 
         self.attn_module = None
         if model_config.decoder.use_attention:
-            self.attn_module = LSTMAttn(model_config.decoder.hidden_dim, input_dim)
+            self.attn_module = LSTMAttn(base_enc_dim, input_dim)
 
     def init_hidden(self, encoder_states, batch_size):
         # initial hidden state of the decoder will be an average of encoder states
@@ -115,7 +92,7 @@ class SimpleDecoder(Net):
 
         query_rep = torch.bmm(query_mask.float(), encoder_outputs) # B x num_ents x dim
         query_rep = query_rep.transpose(1, 2) # B x dim x num_ents
-        hidden_size = self.model_config.encoder.hidden_dim
+        hidden_size = self.model_config.embedding.dim
         ents = query_rep.size(-1)
         query_reps = []
         for i in range(ents):
