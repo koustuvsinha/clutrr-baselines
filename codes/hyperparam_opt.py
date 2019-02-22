@@ -8,6 +8,8 @@ import json
 import operator
 from functools import reduce
 from codes.utils.util import flatten_dictionary
+import argparse
+import glob
 
 
 def getFromDict(dataDict, mapList):
@@ -109,5 +111,33 @@ def create_configs(config_id):
             f.write(yaml.dump(yaml.load(json.dumps(new_config)), default_flow_style=False))
         current_id += 1
 
+def create_run_file(args):
+    path = os.path.dirname(os.path.realpath(__file__)).split('/codes')[0]
+    config_dir = os.path.join(path, "config")
+    config_files = glob.glob(os.path.join(config_dir, args.model + '_hp*'))
+    run_file = "#!/bin/sh\n"
+    run_file += "export COMET_API='{}'\n".format(args.comet_api)
+    run_file += "export COMET_WORKSPACE='{}'\n".format(args.comet_workspace)
+    run_file += "export COMET_PROJECT='{}'\n".format(args.comet_project)
+    run_file += "export PYTHONPATH={}\n".format(path)
+    for config_file in config_files:
+        cname = config_file.split('.yaml')[-2].split('/')[-1]
+        pre = 'CUDA_VISIBLE_DEVICES={} '.format(args.gpu)
+        run_file += pre + "python main.py --config_id {}\n".format(cname)
+    with open('{}_hyp_run_{}.sh'.format(args.model, args.gpu), 'w') as fp:
+        fp.write(run_file)
+
+
 if __name__ == '__main__':
-    create_configs('bilstm')
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--comet_api", type=str, default='')
+    parser.add_argument("--comet_workspace", type=str, default='***REMOVED***')
+    parser.add_argument("--comet_project", type=str, default='compositionality-nli')
+    parser.add_argument('--model', type=str, default='bilstm', help='either one in bilstm,gat_clean,lstm_atten,mac,rn,rn_tpr')
+    parser.add_argument('--local', action='store_true', help="If true, run on machines not on slurm")
+    parser.add_argument('--gpu', type=str, default='0', help='works in local, run jobs on this gpu')
+    parser.add_argument('--stdout', type=str, default='std_outputs', help='folder to store std outputs')
+    args = parser.parse_args()
+
+    create_configs(args.model)
+    create_run_file(args)
