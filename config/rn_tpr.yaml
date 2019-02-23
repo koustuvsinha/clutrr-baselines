@@ -83,7 +83,7 @@ model:
     query_ents: 2
     tmp_name: codes.models.gnn.decoder.GraphLSTMDecoder
     invalidate_embeddings: False
-    use_attention: False  # use attention in classification decoder
+    pool_type: last # can be either attn, max, mean or last
   beam:
     beam_size: 3
     alpha: 0

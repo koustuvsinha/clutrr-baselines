@@ -51,19 +51,21 @@ class SimpleDecoder(Net):
         else:
             self.embedding = shared_embeddings
 
+        self.pool_type = model_config.decoder.pool_type
         # set simple MLP classifier
         base_enc_dim = model_config.embedding.dim
         if model_config.encoder.bidirectional:
             base_enc_dim *=2
         query_rep = base_enc_dim * model_config.decoder.query_ents
 
-
+        if self.pool_type == 'concat':
+            base_enc_dim = base_enc_dim*2
         input_dim = query_rep + base_enc_dim
         output_dim = model_config.target_size
         self.decoder2vocab = self.get_mlp(input_dim, output_dim)
 
         self.attn_module = None
-        if model_config.decoder.use_attention:
+        if self.pool_type == 'attn':
             self.attn_module = LSTMAttn(base_enc_dim, input_dim)
 
     def init_hidden(self, encoder_states, batch_size):
@@ -106,16 +108,28 @@ class SimpleDecoder(Net):
         encoder_outputs = batch.encoder_outputs
         _, seq_len, dim = encoder_outputs.size()
         if self.model_config.loss_type == 'classify':
-            if self.attn_module:
-                # print('----query_rep shape:', query_rep.shape)
-                # print('----encoder_outputs shape', encoder_outputs.shape)
-                # print('----hidden rep shape', batch.encoder_hidden[0].shape)
-                weighted_encoder_outputs = self.attn_module(query_rep, encoder_outputs)
-                # print('+++++++++++++++', weighted_encoder_outputs.shape)
-                # print('+++++++++++++++', encoder_outputs[:, -1, :].shape)
-                mlp_inp = torch.cat([query_rep.squeeze(1), weighted_encoder_outputs], -1)
+            if self.pool_type == 'attn':
+                emb = self.attn_module(query_rep, encoder_outputs)
+            elif self.pool_type == 'max':
+                # encoder_outputs[encoder_outputs == 0] = -1e9
+                emb = torch.max(encoder_outputs, 1)[0]
+            elif self.pool_type == 'mean':
+                sent_len = torch.FloatTensor(batch.inp_lengths.copy()).unsqueeze(1).to(encoder_outputs.device)
+                emb = torch.sum(encoder_outputs, 1).squeeze(0)
+                emb = emb / sent_len.expand_as(emb)
+            elif self.pool_type == 'concat':
+                sent_len = torch.FloatTensor(batch.inp_lengths.copy()).unsqueeze(1).to(encoder_outputs.device)
+                emb_mean = torch.sum(encoder_outputs, 1).squeeze(0)
+                emb_mean = emb_mean / sent_len.expand_as(emb_mean)
+                encoder_outputs[encoder_outputs == 0] = -1e9
+                emb_max = torch.max(encoder_outputs, 1)[0]
+                emb = torch.cat([emb_max, emb_mean], -1)
             else:
-                mlp_inp = torch.cat([query_rep.squeeze(1), encoder_outputs[:, -1, :]], -1)
+                emb = encoder_outputs[:, -1, :]
+            if emb.dim() == 3:
+                emb = emb.squeeze(0)
+                assert emb.dim() == 2
+            mlp_inp = torch.cat([query_rep.squeeze(1), emb], -1)
         else:
             decoder_inp = step_batch.decoder_inp
             check_id_emb(decoder_inp, self.model_config.vocab_size)

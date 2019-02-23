@@ -25,7 +25,7 @@ dataset:
   sentence_mode: false #sentence mode processes each input story sentence separately. For GNN, this helps to maintaining a node pair -> sentence mapping
 model:
   name: baseline1
-  batch_size: 100
+  batch_size: 32
   num_epochs: 20
   num_entity_block: 20
   persist_per_epoch: -1
@@ -77,7 +77,7 @@ model:
     dropout: 0
     query_ents: 2
     tmp_name: codes.models.gnn.decoder.GraphLSTMDecoder
-    use_attention: True  # use attention in classification decoder
+    pool_type: attn # can be either attn, max, mean or last
   beam:
     beam_size: 3
     alpha: 0

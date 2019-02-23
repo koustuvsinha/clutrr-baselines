@@ -206,9 +206,12 @@ def _run_one_epoch_test(experiment):
                 epoch = experiment.epoch_index
                 if experiment.config.log.test_each_epoch:
                     experiment.comet_ml.log_metric("test_acc_{}".format(test_fl_name), acc, step=epoch)
-                test_accs.append((test_fl_name, str(acc)))
+                test_accs.append((test_fl_name, acc))
     experiment.config.log.logger.info("------------------------")
-    experiment.config.log.logger.info("> togrep : {} : Epoch: {} Test accuracies: {}, Mean test accuracy : {}".format(experiment.config.general.id, experiment.epoch_index, ' ,'.join(['{}:{}'.format(t[0],t[1]) for t in test_accs]), np.mean(test_accs)))
+    experiment.config.log.logger.info("> togrep : {} : Epoch: {} Test accuracies: {}, Mean test accuracy : {}".format(
+        experiment.config.general.id, experiment.epoch_index,
+        ' ,'.join(['{}:{}'.format(t[0],str(t[1])) for t in test_accs]),
+        np.mean([t[1] for t in test_accs])))
     return test_accs
 
 

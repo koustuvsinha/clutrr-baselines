@@ -3,9 +3,9 @@ general:
   seed: 42
   base_path: ''
   device: cuda:0
-  id: mac
-  exp_name: exp_mac
-  description: train mac
+  id: GRAPHSUM1
+  exp_name: default
+  description: Sample code. Does not train any model
   commit_id: ''
   mode: train # can be train or infer
 dataset:
@@ -47,11 +47,11 @@ model:
     pretrained_embedding_path: w2v/w2v_sst.txt
     # define policy of choosing entity embedding
     # if entity_embedding_policy :
-    #       1. random, then just assign random values to entity embeddings per run
+    #       1. random, then just assign random values to entity embeddings per epoch
     #       2. learned, then learn the entity embeddings, but since we are randomizing entity
     #                              assignments in data this would not be an issue
-    #       3. fixed, then set aside k random values for the entities and keep them fixed after each run
-    entity_embedding_policy: random
+    #       3. fixed, then set aside k random values for the entities but do not change them after one epoch
+    entity_embedding_policy: fixed
   optimiser:
     name: adam
     learning_rate: 0.001
@@ -59,25 +59,25 @@ model:
     scheduler_gamma: 1
     scheduler_patience: 10
     l2_penalty: 0
-    clip: 8
+    clip: 1
   encoder:
-    name: codes.baselines.MAC.mac_nets.MACNetworkEncoder
+    name: codes.baselines.lstm.basic.SimpleEncoder
     hidden_dim: 100
     nlayers: 2
     bidirectional: true
     dropout: 0
     pooling: maxpool # can be attention or maxpool
     tmp_name: codes.models.gnn.encoder.GraphEncoder
+    invalidate_embeddings: True
   decoder:
-    name: codes.baselines.MAC.mac_nets.MACNetworkDecoder
+    name: codes.baselines.lstm.basic.SimpleDecoder
     hidden_dim: 200
     nlayers: 2
     bidirectional: false
     dropout: 0
     query_ents: 2
     tmp_name: codes.models.gnn.decoder.GraphLSTMDecoder
-    invalidate_embeddings: False
-    pool_type: last # can be either attn, max, mean or last
+    pool_type: mean # can be either attn, max, mean, concat or last
   beam:
     beam_size: 3
     alpha: 0
@@ -114,16 +114,6 @@ model:
     f_theta:
       dim_1: 256
       dim_2: 512
-  mac:
-    projQuery: false
-    shareQuestion: true
-    num_iteration: 6
-    controlProjAct: false
-    dropout:
-      memory: 0.2
-      read: 0.2
-      write: 0.2
-
 log:
   file_path: ''
   logs_per_epoch: 50
