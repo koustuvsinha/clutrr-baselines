@@ -22,4 +22,4 @@ if __name__ == '__main__':
     df = pd.DataFrame(rows)
     df.to_csv('hyp_results.csv')
     print("Best hyperparams : ")
-    print(df.groupby(['model_name'], sort=False)['test_acc'].max())
+    print(df.sort_values('test_acc', ascending=False).drop_duplicates(['model_name']))
