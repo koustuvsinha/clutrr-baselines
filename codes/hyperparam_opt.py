@@ -152,10 +152,11 @@ def create_run_file(args):
             cname = config_file.split('.yaml')[-2].split('/')[-1]
             pre = 'CUDA_VISIBLE_DEVICES={} '.format(gpu_id)
             mini_run += pre + "python {}/codes/app/main.py --config_id {}\n".format(path, cname)
-        mini_file = '{}/mini_{}_{}.sh'.format(script_dir, cname, gpu_id)
+        mini_file = 'mini_{}_{}.sh'.format(args.model, gpu_id)
         with open(mini_file, 'w') as mp:
-            mp.write(mini_run)
-        run_file += "./{} > /dev/null &\n".format(mini_file)
+            mp.write(os.path.join(script_dir, mini_file))
+        run_file += "cd {}\n".format(script_dir)
+        run_file += "sh {} > /dev/null &\n".format(mini_file)
     with open('{}/{}_hyp_run.sh'.format(script_dir, args.model), 'w') as fp:
         fp.write(run_file)
 
