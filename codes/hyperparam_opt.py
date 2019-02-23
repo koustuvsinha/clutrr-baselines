@@ -10,7 +10,7 @@ from functools import reduce
 from codes.utils.util import flatten_dictionary
 import argparse
 import glob
-
+import numpy as np
 
 def getFromDict(dataDict, mapList):
     return reduce(operator.getitem, mapList, dataDict)
@@ -115,16 +115,46 @@ def create_run_file(args):
     path = os.path.dirname(os.path.realpath(__file__)).split('/codes')[0]
     config_dir = os.path.join(path, "config")
     config_files = glob.glob(os.path.join(config_dir, args.model + '_hp*'))
+    script_dir = os.path.join(path, "scripts")
+    if not os.path.exists(script_dir):
+        os.makedirs(script_dir)
+    print("Found {} config files".format(len(config_files)))
     run_file = "#!/bin/sh\n"
+    if not args.local:
+        run_file += "#SBATCH --job-name=hyperparam_{}\n".format(args.model)
+        run_file += "#SBATCH --output=/checkpoint/***REMOVED***/jobs/{}.out\n".format(args.model)
+        run_file += "#SBATCH --error=/checkpoint/***REMOVED***/jobs/{}.err\n".format(args.model)
+        run_file += "#SBATCH --partition=uninterrupted\n"
+        run_file += "#SBATCH --nodes=1\n"
+        run_file += "#SBATCH --ntasks-per-node=1\n"
+        run_file += "#SBATCH --gres=gpu:1\n"
+        run_file += "#SBATCH --cpus-per-task 16\n"
+        run_file += "#SBATCH --time 01:00:00\n"
+        run_file += "module purge\n"
+    run_file += "module load anaconda3\n"
+    run_file += "conda activate gnnlogic\n"
+    run_file += "cd {}/codes\n".format(path)
     run_file += "export COMET_API='{}'\n".format(args.comet_api)
     run_file += "export COMET_WORKSPACE='{}'\n".format(args.comet_workspace)
     run_file += "export COMET_PROJECT='{}'\n".format(args.comet_project)
     run_file += "export PYTHONPATH={}\n".format(path)
-    for config_file in config_files:
-        cname = config_file.split('.yaml')[-2].split('/')[-1]
-        pre = 'CUDA_VISIBLE_DEVICES={} '.format(args.gpu)
-        run_file += pre + "python app/main.py --config_id {}\n".format(cname)
-    with open('{}_hyp_run_{}.sh'.format(args.model, args.gpu), 'w') as fp:
+    gpus = args.gpu.split(',')
+    print("Found {} gpus".format(len(gpus)))
+    chunk_config_ids = np.arange(len(config_files))
+    chunk_config_ids = list(np.array_split(chunk_config_ids, len(gpus)))
+    print("Partitioning runs in the gpus : {}".format([len(t) for t in chunk_config_ids]))
+    for gpu_id, chunk in enumerate(chunk_config_ids):
+        mini_run = "#!/bin/sh\n"
+        for config_file_id in chunk:
+            config_file = config_files[config_file_id]
+            cname = config_file.split('.yaml')[-2].split('/')[-1]
+            pre = 'CUDA_VISIBLE_DEVICES={} '.format(gpu_id)
+            mini_run += pre + "python {}/codes/app/main.py --config_id {}\n".format(path, cname)
+        mini_file = '{}/mini_{}_{}.sh'.format(script_dir, cname, gpu_id)
+        with open(mini_file, 'w') as mp:
+            mp.write(mini_run)
+        run_file += "./{} > /dev/null &\n".format(mini_file)
+    with open('{}/{}_hyp_run.sh'.format(script_dir, args.model), 'w') as fp:
         fp.write(run_file)
 
 
@@ -137,6 +167,7 @@ if __name__ == '__main__':
     parser.add_argument('--local', action='store_true', help="If true, run on machines not on slurm")
     parser.add_argument('--gpu', type=str, default='0', help='works in local, run jobs on this gpu')
     parser.add_argument('--stdout', type=str, default='std_outputs', help='folder to store std outputs')
+    parser.add_argument('--script_dir', type=str, default='scripts', help='folder to dump all these scripts')
     args = parser.parse_args()
 
     create_configs(args.model)
