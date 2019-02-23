@@ -123,7 +123,7 @@ def create_run_file(args):
     for config_file in config_files:
         cname = config_file.split('.yaml')[-2].split('/')[-1]
         pre = 'CUDA_VISIBLE_DEVICES={} '.format(args.gpu)
-        run_file += pre + "python main.py --config_id {}\n".format(cname)
+        run_file += pre + "python app/main.py --config_id {}\n".format(cname)
     with open('{}_hyp_run_{}.sh'.format(args.model, args.gpu), 'w') as fp:
         fp.write(run_file)
 
