@@ -17,8 +17,9 @@ if __name__ == '__main__':
                 sp = rf.split(' : ')
                 m_test_acc = float(sp[-1].lstrip())
                 file_name = sp[1]
-                rows.append({'file': file_name, 'test_acc':m_test_acc})
+                model_name = file_name.split('_hp')[0]
+                rows.append({'file': file_name, 'model_name': model_name, 'test_acc':m_test_acc})
     df = pd.DataFrame(rows)
     df.to_csv('hyp_results.csv')
     print("Best hyperparams : ")
-    print(df.groupby(['file'], sort=False)['test_acc'].max())
+    print(df.groupby(['model_name'], sort=False)['test_acc'].max())
