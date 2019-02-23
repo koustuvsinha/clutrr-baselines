@@ -37,6 +37,7 @@ model:
   loss_criteria: CE
   loss_type: classify   # set this to classify when performing a classification task, else `seq2seq`
   query_entities: 2
+  checkpoint: True
   early_stopping:
     patience: 3
     metric_to_track: val_loss

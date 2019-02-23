@@ -296,7 +296,7 @@ def _run_one_epoch(dataloader, experiment, mode, filename=''):
         assert len(true_inp) == len(true_outp) == len(pred_outp)
         write_sequences(true_inp, true_outp, pred_outp, mode, experiment.epoch_index,
                         exp_name=experiment.config.general.exp_name)
-    if experiment.config.general.mode == 'train':
+    if experiment.config.general.mode == 'train' and experiment.config.model.checkpoint:
         experiment.save_checkpoint(is_best=False)
 
     return loss, epoch_rel
