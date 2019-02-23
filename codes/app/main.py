@@ -6,10 +6,7 @@ from codes.utils.argument_parser import argument_parser
 from addict import Dict
 import os
 import logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
+
 base_path = os.path.dirname(os.path.realpath(__file__)).split('codes')[0]
 
 def start(config, experiment):
@@ -25,9 +22,19 @@ def resume(config, experiment):
 if __name__ == '__main__':
     config_id, exp_id = argument_parser()
     print(config_id)
+    logPath = os.path.join(base_path, 'logs')
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler("{0}/{1}.log".format(logPath, config_id)),
+            logging.StreamHandler()
+        ]
+    )
     if len(exp_id) == 0:
-        logging.info("Running new experiment")
         config = get_config(config_id=config_id)
+        logger = logging.getLogger()
+        logger.info("Running new experiment")
         ex = OfflineExperiment(offline_directory=os.path.join(base_path, 'comet_runs'),
                         workspace=config.log.comet.workspace,
                         project_name=config.log.comet.project_name,
@@ -40,6 +47,7 @@ if __name__ == '__main__':
     else:
         logging.info("Resuming old experiment with id {}".format(exp_id))
         config = get_config(config_id=config_id)
+        logger = logging.getLogger()
         ex = ExistingExperiment(
             api_key=config.log.comet.api_key,
             previous_experiment=exp_id,

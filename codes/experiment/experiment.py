@@ -18,12 +18,11 @@ import glob
 from io import BytesIO
 from zipfile import ZipFile
 from urllib.request import urlopen
-
 import logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
+for handler in logging.root.handlers[:]:
+    logging.root.removeHandler(handler)
+base_path = os.path.dirname(os.path.realpath(__file__)).split('codes')[0]
+logPath = os.path.join(base_path, 'logs')
 
 def get_data(config):
     # check if data folder is present. If not, create it
@@ -34,13 +33,13 @@ def get_data(config):
     data_path = os.path.join(base_path, config.dataset.data_path)
     if not os.path.exists(data_path):
         remote = "{}/{}.zip".format(config.dataset.base_url, config.dataset.data_path)
-        logging.info("Downloading data from {}".format(remote))
+        config.log.logger.info("Downloading data from {}".format(remote))
         resp = urlopen(remote)
         zipfile = ZipFile(BytesIO(resp.read()))
         os.makedirs(data_path)
         zipfile.extractall(path=data_path)
     else:
-        logging.info("Data present at {}".format(data_path))
+        config.log.logger.info("Data present at {}".format(data_path))
 
 
 def run_experiment(config, exp, resume=False):
@@ -52,6 +51,16 @@ def run_experiment(config, exp, resume=False):
     :return:
     """
     write_config_log(config)
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler("{0}/{1}.log".format(logPath, config.general.id)),
+            logging.StreamHandler()
+        ]
+    )
+    logger = logging.getLogger()
+    config.log.logger = logger
     experiment = Experiment()
     parent_dir = os.path.abspath(os.pardir).split('/codes')[0]
     # get data
@@ -76,15 +85,15 @@ def run_experiment(config, exp, resume=False):
         data_util.save(os.path.join(parent_dir, 'data', config.dataset.data_path, config.dataset.save_path))
 
     vocab_size = len(data_util.word2id)
-    logging.info("Vocab Size : {}".format(vocab_size))
+    config.log.logger.info("Vocab Size : {}".format(vocab_size))
     target_size = len(data_util.target_word2id)
-    logging.info("Target size : {}".format(target_size))
+    config.log.logger.info("Target size : {}".format(target_size))
     config.model.vocab_size = vocab_size
     config.model.target_size = target_size
     config.model.max_nodes = data_util.num_entity_block
     config.model.max_sent_length = data_util.max_sent_length
 
-    logging.info("Loading testing data")
+    config.log.logger.info("Loading testing data")
     data_util.process_test_data(base_path, config.dataset.test_files)
     config.model.max_word_length = data_util.max_word_length
     config.model.edge_types = len(data_util.unique_edge_dict)
@@ -115,7 +124,7 @@ def run_experiment(config, exp, resume=False):
     experiment.optimizers, experiment.schedulers = experiment.trainer.get_optimizers()
     if resume or config.general.mode == 'infer':
         # resume an old experiment
-        logging.info("Loading model parameters")
+        config.log.logger.info("Loading model parameters")
         experiment.load_checkpoint(exp.id)
     # set device
     experiment.device = device
@@ -146,7 +155,7 @@ def _run_epochs(experiment):
         validation_metrics_dict[key].reset()
     while experiment.epoch_index <= config.model.num_epochs:
         experiment.epoch_index += 1
-        logging.info("Epoch {}".format(experiment.epoch_index))
+        config.log.logger.info("Epoch {}".format(experiment.epoch_index))
         _run_one_epoch_train_val(experiment)
         for scheduler in experiment.schedulers:
             if config.model.scheduler_type == "exp":
@@ -155,6 +164,8 @@ def _run_epochs(experiment):
                 scheduler.step(validation_metrics_dict[metric_to_perform_early_stopping].current_value)
         if config.model.persist_per_epoch > 0 and experiment.epoch_index % config.model.persist_per_epoch == 0:
             experiment.model.save_model(epochs=experiment.epoch_index, optimizers=experiment.optimizers)
+        if experiment.config.log.test_each_epoch:
+            _run_one_epoch_test(experiment)
     else:
         test_accs = _run_one_epoch_test(experiment)
         best_epoch_index = experiment.epoch_index - validation_metrics_dict[metric_to_perform_early_stopping].counter
@@ -188,13 +199,16 @@ def _run_one_epoch_test(experiment):
             for test_rel, dlo in experiment.dataloaders.test.items():
                 dataloader = dlo['dl']
                 test_file = dlo['file']
+                test_fl_name = dlo['file'].split('/')[-1]
                 _, acc = _run_one_epoch(dataloader, experiment, mode="test",
                                         filename=test_file)
                 experiment.comet_ml.log_metric("test_acc", acc, step=test_rel)
-                test_accs.append(acc)
-    logging.info("------------------------")
-    logging.info("> Test accuracies: {}".format(' ,'.join([str(t) for t in test_accs])))
-    logging.info("> Mean test accuracy : {}".format(np.mean(test_accs)))
+                epoch = experiment.epoch_index
+                if experiment.config.log.test_each_epoch:
+                    experiment.comet_ml.log_metric("test_acc_{}".format(test_fl_name), acc, step=epoch)
+                test_accs.append((test_fl_name, str(acc)))
+    experiment.config.log.logger.info("------------------------")
+    experiment.config.log.logger.info("> togrep : {} : Epoch: {} Test accuracies: {}, Mean test accuracy : {}".format(experiment.config.general.id, experiment.epoch_index, ' ,'.join(['{}:{}'.format(t[0],t[1]) for t in test_accs]), np.mean(test_accs)))
     return test_accs
 
 
@@ -266,12 +280,12 @@ def _run_one_epoch(dataloader, experiment, mode, filename=''):
     if mode == 'val':
         experiment.validation_metrics['val_acc'].update(epoch_rel)
         experiment.validation_metrics['val_loss'].update(loss)
-    logging.info(" -------------------------- ")
-    logging.info("Mode : {} , File : {}".format(mode, filename))
-    logging.info("Loss : {}, Accuracy : {}".format(
+    experiment.config.log.logger.info(" -------------------------- ")
+    experiment.config.log.logger.info("Mode : {} , File : {}".format(mode, filename))
+    experiment.config.log.logger.info("Loss : {}, Accuracy : {}".format(
         loss, epoch_rel))
 
-    if mode == 'test':
+    if mode == 'test' and experiment.config.log.predictions:
         # save predicted examples
         true_inp = [' '.join(sent) for sent in true_inp]
         true_outp = [' '.join(sent) for sent in true_outp]
