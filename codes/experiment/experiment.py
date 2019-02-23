@@ -22,7 +22,6 @@ import logging
 for handler in logging.root.handlers[:]:
     logging.root.removeHandler(handler)
 base_path = os.path.dirname(os.path.realpath(__file__)).split('codes')[0]
-logPath = os.path.join(base_path, 'logs')
 
 def get_data(config):
     # check if data folder is present. If not, create it
@@ -51,6 +50,12 @@ def run_experiment(config, exp, resume=False):
     :return:
     """
     write_config_log(config)
+    log_base = config['logs']['base_path']
+    if len(log_base) <= 0:
+        log_base = os.path.dirname(os.path.realpath(__file__)).split('codes')[0]
+    if not os.path.exists(log_base):
+        os.makedirs(log_base)
+    logPath = os.path.join(log_base, 'logs')
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',

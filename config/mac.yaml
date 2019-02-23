@@ -135,5 +135,6 @@ log:
     project_name: clutrr # comet project name
     workspace: ***REMOVED*** # comet workspace
     disabled: false # disable when debugging
+  base_path: ''
 plot:
   base_path: ''

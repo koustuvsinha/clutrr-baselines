@@ -105,6 +105,7 @@ def create_configs(config_id):
         current_str_id = config_id + "_hp_" + str(current_id)
         new_config["general"]["id"] = current_str_id
         new_config["model"]["checkpoint"] = False
+        new_config["log"]["base_path"] = "/checkpoint/***REMOVED***/clutrr/"
         for hyperparam in hyperparams:
             setInDict(new_config, hyperparam.key_list, hyperparam.value)
         new_config_file = target_dir + "/{}.yaml".format(current_str_id)
