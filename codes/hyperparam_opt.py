@@ -130,12 +130,12 @@ def create_run_file(args):
         run_file += "#SBATCH --nodes=1\n"
         run_file += "#SBATCH --ntasks-per-node=1\n"
         run_file += "#SBATCH --gres=gpu:1\n"
-        run_file += "#SBATCH --cpus-per-task 16\n"
+        run_file += "#SBATCH --cpus-per-task 24\n"
         run_file += "#SBATCH --time 01:00:00\n"
         run_file += "module purge\n"
     run_file += "module load anaconda3\n"
     run_file += "conda activate gnnlogic\n"
-    run_file += "cd {}/codes\n".format(path)
+    run_file += "cd {}\n".format(script_dir)
     run_file += "export COMET_API='{}'\n".format(args.comet_api)
     run_file += "export COMET_WORKSPACE='{}'\n".format(args.comet_workspace)
     run_file += "export COMET_PROJECT='{}'\n".format(args.comet_project)
@@ -155,7 +155,6 @@ def create_run_file(args):
         mini_file = 'mini_{}_{}.sh'.format(args.model, gpu_id)
         with open(os.path.join(script_dir, mini_file), 'w') as mp:
             mp.write(mini_run)
-        run_file += "cd {}\n".format(script_dir)
         run_file += "sh {} > /dev/null 2>&1 &\n".format(mini_file)
     with open('{}/{}_hyp_run.sh'.format(script_dir, args.model), 'w') as fp:
         fp.write(run_file)
