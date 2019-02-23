@@ -13,7 +13,7 @@ if __name__ == '__main__':
     for res in results:
         r_file = open(res).readlines()
         for rf in r_file:
-            if rf.startswith("> togrep :"):
+            if "> togrep :" in rf:
                 sp = rf.split(' : ')
                 m_test_acc = float(sp[-1].lstrip())
                 file_name = sp[1]
