@@ -44,7 +44,7 @@ if __name__ == '__main__':
         print("Directory : {}".format(folder))
         base_data_name = folder.split('/')[-2]
         print("Data name",base_data_name)
-        wrapper_file_name = 'wrapper_{}.sh'.format(base_data_name)
+        wrapper_file_name = 'wrapper_{}_{}.sh'.format(base_data_name, '_'.join(models))
         data_config = json.load(open(os.path.join(folder, 'config.json'),'r'))
         train_task = ','.join(data_config['train_task'].keys())
         test_task = ','.join(data_config['test_tasks'].keys())
@@ -54,7 +54,7 @@ if __name__ == '__main__':
         gpu_choice = random.choice(gpus)
         run_file = "#!/bin/sh\n"
         if not args.local:
-            run_file += "#SBATCH --job-name=clutrr_{}\n".format(base_data_name)
+            run_file += "#SBATCH --job-name=clutrr_{}_{}\n".format(base_data_name, '_'.join(models))
             run_file += "#SBATCH --output=/checkpoint/***REMOVED***/jobs/{}_{}_%j.out\n".format(base_data_name, '_'.join(models))
             run_file += "#SBATCH --error=/checkpoint/***REMOVED***/jobs/{}_{}_%j.err\n".format(base_data_name, '_'.join(models))
             run_file += "#SBATCH --partition=uninterrupted\n"
@@ -83,7 +83,7 @@ if __name__ == '__main__':
             fp.write(run_file)
         run_flnames.append(run_flname)
         wrapper_file = "#!/bin/sh\n"
-        wrapper_file += "export CUDA_VISIBLE_DEVICES=$SLURM_LOCALID\n"
+        #wrapper_file += "export CUDA_VISIBLE_DEVICES=$SLURM_LOCALID\n"
         wrapper_file += "echo $SLURMD_NODENAME $SLURM_JOB_ID $CUDA_VISIBLE_DEVICES\n"
         wrapper_file += "./{}_{}_model_$SLURM_LOCALID.sh\n".format(base_data_name, '_'.join(models))
         wrapper_file += "\n"
