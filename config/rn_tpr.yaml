@@ -25,7 +25,7 @@ dataset:
   sentence_mode: false #sentence mode processes each input story sentence separately. For GNN, this helps to maintaining a node pair -> sentence mapping
 model:
   name: baseline1
-  batch_size: 32
+  batch_size: 16
   num_epochs: 20
   num_entity_block: 20
   persist_per_epoch: -1
