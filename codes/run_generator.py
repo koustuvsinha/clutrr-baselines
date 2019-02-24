@@ -14,7 +14,7 @@ if __name__ == '__main__':
     parser.add_argument("--comet_workspace", type=str, default='***REMOVED***')
     parser.add_argument("--comet_project", type=str, default='compositionality-nli')
     parser.add_argument('--loc', type=str, default='data/')
-    parser.add_argument('--models', type=str, default='bilstm,gat_clean,lstm_atten,mac,rn,rn_tpr')
+    parser.add_argument('--models', type=str, default='bilstm_atten,bilstm_max,bilstm_mean,bilstm_concat,gat_clean,mac,rn,rn_tpr')
     parser.add_argument('--local', action='store_true', help="If true, run on machines not on slurm")
     parser.add_argument('--gpus',type=str, default='0', help='works in local, run jobs on these gpus')
     parser.add_argument('--stdout', type=str, default='std_outputs', help='folder to store std outputs')
@@ -31,11 +31,20 @@ if __name__ == '__main__':
     folders = glob.glob(os.path.join(base_path, args.loc) + '*/')
     print("Found {} folders".format(len(folders)))
     ct = 0
-    run_flnames = {gpu:[] for gpu in gpus}
+    run_flnames = []
+
+    # file paths
+    path = os.path.dirname(os.path.realpath(__file__)).split('/codes')[0]
+    config_dir = os.path.join(path, "config")
+    script_dir = os.path.join(path, "scripts")
+    if not os.path.exists(script_dir):
+        os.makedirs(script_dir)
+
     for folder in folders:
         print("Directory : {}".format(folder))
         base_data_name = folder.split('/')[-2]
         print("Data name",base_data_name)
+        wrapper_file_name = 'wrapper_{}.sh'.format(base_data_name)
         data_config = json.load(open(os.path.join(folder, 'config.json'),'r'))
         train_task = ','.join(data_config['train_task'].keys())
         test_task = ','.join(data_config['test_tasks'].keys())
@@ -45,58 +54,70 @@ if __name__ == '__main__':
         gpu_choice = random.choice(gpus)
         run_file = "#!/bin/sh\n"
         if not args.local:
-            run_file += "#SBATCH --time=0-0:30\n"
-            run_file += "#SBATCH --account=rrg-dprecup\n"
-            run_file += "#SBATCH --ntasks=16\n"
-            run_file += "#SBATCH --gres=gpu:1\n"
-            run_file += "#SBATCH --mem=0\n"
-            run_file += "module load nixpkgs/16.09\n"
-            run_file += "module load intel/2018.3\n"
-            run_file += "module load cuda/10.0.130\n"
-            run_file += "module load cudnn/7.4\n"
-            run_file += "source activate gnnlogic\n"
-            run_file += "cd /home/***REMOVED***/projects/def-jpineau/***REMOVED***/InferSent-comp/\n"
+            run_file += "#SBATCH --job-name=clutrr_{}\n".format(base_data_name)
+            run_file += "#SBATCH --output=/checkpoint/***REMOVED***/jobs/{}.out\n".format(base_data_name)
+            run_file += "#SBATCH --error=/checkpoint/***REMOVED***/jobs/{}.err\n".format(base_data_name)
+            run_file += "#SBATCH --partition=uninterrupted\n"
+            run_file += "#SBATCH --nodes=2\n"
+            run_file += "#SBATCH --ntasks-per-node={}\n".format(len(models))
+            run_file += "#SBATCH --gres=gpu:{}\n".format(len(models))
+            run_file += "#SBATCH --cpus-per-task 24\n"
+            run_file += "#SBATCH --time 04:00:00\n"
+        run_file += "source activate gnnlogic\n"
+        run_file += "cd {}\n".format(script_dir)
         run_file += "export COMET_API='{}'\n".format(args.comet_api)
         run_file += "export COMET_WORKSPACE='{}'\n".format(args.comet_workspace)
         run_file += "export COMET_PROJECT='{}'\n".format(args.comet_project)
-        run_file += "export PYTHONPATH={}\n".format(base_path)
+        run_file += "export PYTHONPATH={}\n".format(path)
         if args.local:
             run_file += "cd {}codes/app/\n".format(base_path)
         run_file += "\n"
 
-        for model in models:
+        # end of batch file, which should now run the corresponding wrapper
+        run_file += "srun --label {}".format(wrapper_file_name)
+        print("Writing sbatch file")
+        run_flname = 'run_{}.sh'.format(base_data_name)
+        with open(os.path.join(script_dir, run_flname), 'w') as fp:
+            fp.write(run_file)
+        run_flnames.append(run_flname)
+        wrapper_file = "#!/bin/sh\n"
+        wrapper_file += "export CUDA_VISIBLE_DEVICES=$SLURM_LOCALID\n"
+        wrapper_file += "echo $SLURMD_NODENAME $SLURM_JOB_ID $CUDA_VISIBLE_DEVICES\n"
+        wrapper_file += "./{}_model_$(SLURM_LOCALID).sh\n".format(base_data_name)
+        wrapper_file += "\n"
+        with open(os.path.join(script_dir, wrapper_file_name), 'w') as fp:
+            fp.write(wrapper_file)
+
+        for mid, model in enumerate(models):
             if args.local:
                 pre = 'CUDA_VISIBLE_DEVICES={} '.format(gpu_choice)
             else:
                 pre = ''
+            model_run_file = "#!/bin/sh\n"
             output_file = '{}/{}_{}.out'.format(args.stdout, base_path, model)
             config_file = yaml.load(open(os.path.join(base_path, 'config', '{}.yaml'.format(model))))
             config_file['dataset']['data_path'] = base_data_name
             config_file['dataset']['data_desc'] = data_desc
-            yaml.dump(config_file, open(os.path.join(base_path, 'config', '{}_{}.yaml'.format(model, base_data_name)),'w'))
-            run_file += pre + "python main.py --config_id {}_{}\n".format(model, base_data_name)
+            config_file['general']['base_path'] = '/checkpoint/***REMOVED***/clutrr/'
+            yaml.dump(config_file, open(os.path.join(base_path, 'config', '{}_{}.yaml'.format(model, base_data_name)),'w'), default_flow_style=False)
+            model_run_file += pre + "python main.py --config_id {}_{}\n".format(model, base_data_name)
+            with open(os.path.join(script_dir, '{}_model_{}.sh'.format(base_data_name, mid)),'w') as fp:
+                fp.write(model_run_file)
             ct += 1
-        run_file += "\n"
-
-        print("Writing file")
-        if not os.path.exists("runs"):
-            os.makedirs("runs")
-        last_path = folder.split('/')[-2]
-        run_flname = 'runs/run_{}.sh'.format(last_path)
-        with open(run_flname, 'w') as fp:
-            fp.write(run_file)
-        run_flnames[gpu_choice].append(run_flname)
     print("Done, now writing the meta runner")
+    mt = 0
     for gpu in gpus:
         meta_file = "#!/bin/sh\n"
-        for rf in run_flnames[gpu]:
+        for rf in run_flnames:
             if not args.local:
                 meta_file += "sbatch {}\n".format(rf)
             else:
                 meta_file += "./{}\n".format(rf)
-        with open('meta_run_{}.sh'.format(gpu),'w') as fp:
+            mt +=1
+        with open(os.path.join(script_dir, 'meta_run_{}.sh'.format(gpu)),'w') as fp:
             fp.write(meta_file)
     print("Number of experiments to run : {}".format(ct))
+    print("Number of batches to submit : {}".format(mt))
 
 
 

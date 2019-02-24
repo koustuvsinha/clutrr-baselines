@@ -6,7 +6,7 @@ import shutil
 import logging
 
 class Experiment:
-    def __init__(self):
+    def __init__(self, config):
         self.dataloaders = Dict()
         self.data_util = None
         self.model = Dict()
@@ -21,10 +21,9 @@ class Experiment:
         self.generator = None
         self.epoch_index = 0
         self.iteration_index = Dict()
-        self.config = None
+        self.config = config
         self.comet_exp = None
-        parent_dir = os.path.abspath(os.pardir).split('/codes')[0]
-        self.model_save_path = os.path.join(parent_dir, 'model')
+        self.model_save_path = os.path.join(config.general.base_path, 'model')
         if not os.path.exists(self.model_save_path):
             os.makedirs(self.model_save_path)
 

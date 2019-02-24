@@ -24,11 +24,7 @@ if __name__ == '__main__':
     print(config_id)
     if len(exp_id) == 0:
         config = get_config(config_id=config_id)
-        log_base = config['logs']['base_path']
-        if len(log_base) <= 0:
-            log_base = os.path.dirname(os.path.realpath(__file__)).split('codes')[0]
-        if not os.path.exists(log_base):
-            os.makedirs(log_base)
+        log_base = config['general']['base_path']
         logging.basicConfig(
             level=logging.INFO,
             format='%(asctime)s - %(levelname)s - %(message)s',

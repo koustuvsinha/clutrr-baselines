@@ -105,7 +105,7 @@ def create_configs(config_id):
         current_str_id = config_id + "_hp_" + str(current_id)
         new_config["general"]["id"] = current_str_id
         new_config["model"]["checkpoint"] = False
-        new_config["log"]["base_path"] = "/checkpoint/***REMOVED***/clutrr/"
+        # new_config["log"]["base_path"] = "/checkpoint/***REMOVED***/clutrr/"
         for hyperparam in hyperparams:
             setInDict(new_config, hyperparam.key_list, hyperparam.value)
         new_config_file = target_dir + "/{}.yaml".format(current_str_id)
@@ -132,9 +132,7 @@ def create_run_file(args):
         run_file += "#SBATCH --gres=gpu:1\n"
         run_file += "#SBATCH --cpus-per-task 24\n"
         run_file += "#SBATCH --time 01:00:00\n"
-        run_file += "module purge\n"
-    run_file += "module load anaconda3\n"
-    run_file += "conda activate gnnlogic\n"
+    run_file += "source activate gnnlogic\n"
     run_file += "cd {}\n".format(script_dir)
     run_file += "export COMET_API='{}'\n".format(args.comet_api)
     run_file += "export COMET_WORKSPACE='{}'\n".format(args.comet_workspace)
