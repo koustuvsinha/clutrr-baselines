@@ -289,6 +289,10 @@ def _run_one_epoch(dataloader, experiment, mode, filename=''):
     experiment.config.log.logger.info("Loss : {}, Accuracy : {}".format(
         loss, epoch_rel))
 
+    base_file = filename.split('/')[-1]
+    experiment.comet_ml.log_metric("{}_loss".format(base_file), loss, step=experiment.epoch_index)
+    experiment.comet_ml.log_metric("{}_accuracy".format(base_file), epoch_rel, step=experiment.epoch_index)
+
     if mode == 'test' and experiment.config.log.predictions:
         # save predicted examples
         true_inp = [' '.join(sent) for sent in true_inp]

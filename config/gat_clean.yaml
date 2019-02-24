@@ -119,7 +119,7 @@ log:
   file_path: ''
   logs_per_epoch: 50
   predictions: False # if true, save predicted examples in log folder
-  test_each_epoch: False # if true, log the test accuracies per epoch
+  test_each_epoch: True # if true, log the test accuracies per epoch
   comet:
     api_key: ***REMOVED*** # put the comet api key here
     project_name: clutrr # comet project name
