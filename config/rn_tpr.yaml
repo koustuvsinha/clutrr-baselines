@@ -70,7 +70,7 @@ model:
     pooling: maxpool # can be attention or maxpool
     tmp_name: codes.models.gnn.encoder.GraphEncoder
     rn:
-      g_theta_dim: 256
+      g_theta_dim: 64
       f_theta:
         dim_1: 256
         dim_2: 512

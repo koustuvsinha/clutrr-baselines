@@ -63,7 +63,7 @@ model:
     clip: 1
   encoder:
     name: codes.baselines.lstm.basic.SimpleEncoder
-    hidden_dim: 100
+    hidden_dim: 250
     nlayers: 2
     bidirectional: true
     dropout: 0

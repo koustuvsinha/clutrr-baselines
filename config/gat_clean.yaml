@@ -95,7 +95,7 @@ model:
     pos_dim: 5 # if above is random, then use this flag
     feature_dim: 10 # learns graph features
     num_reads: 3
-    num_message_rounds: 2
+    num_message_rounds: 3
     message_function:
       num_layers: 2
       use_attention: True

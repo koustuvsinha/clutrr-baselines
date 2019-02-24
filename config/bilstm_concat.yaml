@@ -42,7 +42,7 @@ model:
     patience: 3
     metric_to_track: val_loss
   embedding:
-    dim: 100
+    dim: 300
     should_use_pretrained_embedding: false
     should_finetune_embedding: true
     pretrained_embedding_path: w2v/w2v_sst.txt
