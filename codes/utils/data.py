@@ -19,6 +19,7 @@ from torch_geometric.data import Data as GeometricData
 from torch_geometric.data import Batch as GeometricBatch
 import random
 from itertools import repeat, product
+from typing import List
 import logging
 logging.basicConfig(
     level=logging.INFO,
@@ -48,6 +49,8 @@ class DataRow():
         self.story_edges = None
         self.edge_types = None
         self.query_edge = None
+        # processed attributes
+        self.pattrs = []
 
 
 class DataUtility():
@@ -466,6 +469,92 @@ class DataUtility():
                     adj_mat[ent2_id][ent1_id] = 1
         return adj_mat
 
+    def prepare_for_dataloader(self, dataRows:List[DataRow]) -> List[DataRow]:
+        """
+        Offload processing from dataloader get_item to here.
+        :param dataRows:
+        :return:
+        """
+        for dataRow in dataRows:
+            orig_inp = dataRow.story
+            inp_row_graph = dataRow.story_graph
+            inp_row_pos = []
+            if self.sentence_mode:
+                sent_lengths = [len(sent) for sent in dataRow.story_sents]
+                inp_row = [[self.get_token(word) for word in sent] for sent in dataRow.story_sents]
+                inp_ents = [[id for id in sent if id in self.entity_ids] for sent in inp_row]
+                inp_row_pos = [[widx + 1 for widx, word in enumerate(sent)] for sent in inp_row]
+            else:
+                sent_lengths = [len(dataRow.story)]
+                inp_row = [self.get_token(word) for word in dataRow.story]
+                inp_ents = list(set([id for id in inp_row if id in self.entity_ids]))
+
+            ## calculate one-hot mask for entities which are used in this row
+            flat_inp_ents = inp_ents
+            if self.sentence_mode:
+                flat_inp_ents = [p for x in inp_ents for p in x]
+            inp_ent_mask = [1 if idx + 1 in flat_inp_ents else 0 for idx in range(len(self.entity_ids))]
+
+            # calculate for each entity pair which sentences contain them
+            # output should be a max_entity x max_entity x num_sentences --> which should be later padded
+            # if not sentence mode, then just output max_entity x max_entity x 1
+            num_sents = len(inp_row)  # 8, say
+            if self.sentence_mode:
+                assert len(inp_row) == len(inp_ents)
+                sentence_pointer = np.zeros((len(self.entity_ids), len(self.entity_ids),
+                                             num_sents))
+                for sent_idx, inp_ent in enumerate(inp_ents):
+                    if len(inp_ent) > 1:
+                        for ent1, ent2 in it.combinations(inp_ent, 2):
+                            # check if two same entities are not appearing
+                            if ent1 == ent2:
+                                raise NotImplementedError(
+                                    "For now two same entities cannot appear in the same sentence")
+                            assert ent1 != ent2
+                            # remember we are shifting one bit here
+                            sentence_pointer[ent1 - 1][ent2 - 1][sent_idx] = 1
+
+            else:
+                sentence_pointer = np.ones((len(self.entity_ids), len(self.entity_ids), 1))
+
+            # calculate the output
+            target = [dataRow.target]
+            query = [self.get_token(tp) for tp in dataRow.query]  # tuple
+            # debugging
+            if self.get_token('UNKUNK') in query:
+                print("shit")
+                raise AssertionError("Unknown element cannot be in the query. Check the data.")
+            # one hot integer mask over the input text which specifies the query strings
+            query_mask = [[1 if w == ent else 0 for w in self.__flatten__(inp_row)] for ent in query]
+            # TODO: use query_text and query_text length and pass it back
+            # text_query = [self.data.get_token(tp) for tp in self.dataRows[index].text_query]
+            text_query = []
+            text_target = [START_TOKEN] + dataRow.text_target + [END_TOKEN]
+            text_target = [self.get_token(tp) for tp in text_target]
+
+            # clean graphs for GAT
+            edge_list = dataRow.story_edges  # eg, [(0, 1), (1, 2), (2, 3)]
+            edge_index = list(zip(*edge_list))  # eg, [[0, 1, 2], [1, 2, 3]]
+            edge_index = torch.LongTensor(edge_index)  # 2 x num_edges
+            edge_types = dataRow.edge_types
+            num_ue = len(self.unique_edge_dict)
+            num_e = len(edge_list)
+            edge_attr = torch.zeros(num_e, 1).long()  # [num_edges, 1]
+            # create a one-hot vector for each edge type
+            for i, e in enumerate(edge_types):
+                edge_attr[i][0] = self.unique_edge_dict[e]
+            nodes = list(set([p for x in edge_list for p in x]))
+            x = torch.arange(len(nodes)).unsqueeze(1)  # num_nodes x 1
+
+            geo_data = {'x': x, 'edge_index': edge_index, 'edge_attr': edge_attr, 'y': torch.tensor(target),
+                        'num_nodes': len(nodes)}
+            query_edge = [dataRow.query_edge]
+            num_nodes = [len(nodes)]
+            dataRow.pattrs = [inp_row, inp_ents, query, text_query, query_mask, target, text_target, inp_row_graph,
+               sent_lengths, inp_ent_mask, geo_data, query_edge, num_nodes, sentence_pointer, orig_inp, inp_row_pos]
+        return dataRows
+
+
     def get_dataloader(self, mode='train', test_file=''):
         """
         Return a new SequenceDataLoader instance with appropriate rows
@@ -489,7 +578,9 @@ class DataUtility():
         if self.sentence_mode:
             collate_FN = sent_collate_fn
 
-        return data.DataLoader(SequenceDataLoader(dataRows, self),
+        dataRows = self.prepare_for_dataloader(dataRows)
+
+        return data.DataLoader(SequenceDataLoader(dataRows),
                                batch_size=self.batch_size,
                                num_workers=self.num_workers,
                                collate_fn=collate_FN)
@@ -532,6 +623,12 @@ class DataUtility():
         """
         return [array[i] for i in indices]
 
+    def __flatten__(self, arr):
+        if any(isinstance(el, list) for el in arr):
+            return [a for b in arr for a in b]
+        else:
+            return arr
+
     def save(self, filename='data_files.pkl'):
         """
         Save the current data utility into pickle file
@@ -557,13 +654,12 @@ class SequenceDataLoader(data.Dataset):
     Separate dataloader instance
     """
 
-    def __init__(self, dataRows, data):
+    def __init__(self, dataRows:List[DataRow]):
         """
         :param dataRows: training / validation / test data rows
         :param data: pointer to DataUtility class
         """
         self.dataRows = dataRows
-        self.data = data
 
     def __getitem__(self, index):
         """
@@ -571,89 +667,7 @@ class SequenceDataLoader(data.Dataset):
         :param item:
         :return:
         """
-        orig_inp = self.dataRows[index].story
-        inp_row_graph = self.dataRows[index].story_graph
-        inp_row_pos = []
-        if self.data.sentence_mode:
-            sent_lengths = [len(sent) for sent in self.dataRows[index].story_sents]
-            inp_row = [[self.data.get_token(word) for word in sent] for sent in self.dataRows[index].story_sents]
-            inp_ents = [[id for id in sent if id in self.data.entity_ids] for sent in inp_row]
-            inp_row_pos = [[widx + 1 for widx, word in enumerate(sent)] for sent in inp_row]
-        else:
-            sent_lengths = [len(self.dataRows[index].story)]
-            inp_row = [self.data.get_token(word) for word in self.dataRows[index].story]
-            inp_ents = list(set([id for id in inp_row if id in self.data.entity_ids]))
-
-        ## calculate one-hot mask for entities which are used in this row
-        flat_inp_ents = inp_ents
-        if self.data.sentence_mode:
-            flat_inp_ents = [p for x in inp_ents for p in x]
-        inp_ent_mask = [1 if idx+1 in flat_inp_ents else 0 for idx in range(len(self.data.entity_ids))]
-
-
-        # calculate for each entity pair which sentences contain them
-        # output should be a max_entity x max_entity x num_sentences --> which should be later padded
-        # if not sentence mode, then just output max_entity x max_entity x 1
-        num_sents = len(inp_row) # 8, say
-        if self.data.sentence_mode:
-            assert len(inp_row) == len(inp_ents)
-            sentence_pointer = np.zeros((len(self.data.entity_ids), len(self.data.entity_ids),
-                                         num_sents))
-            for sent_idx, inp_ent in enumerate(inp_ents):
-                if len(inp_ent) > 1:
-                    for ent1, ent2 in it.combinations(inp_ent, 2):
-                        # check if two same entities are not appearing
-                        if ent1 == ent2:
-                            raise NotImplementedError("For now two same entities cannot appear in the same sentence")
-                        assert ent1 != ent2
-                        # remember we are shifting one bit here
-                        sentence_pointer[ent1-1][ent2-1][sent_idx] = 1
-
-        else:
-            sentence_pointer = np.ones((len(self.data.entity_ids), len(self.data.entity_ids), 1))
-
-
-        # calculate the output
-        target = [self.dataRows[index].target]
-        query = [self.data.get_token(tp) for tp in self.dataRows[index].query] # tuple
-        # debugging
-        if self.data.get_token('UNKUNK') in query:
-            print("shit")
-            raise AssertionError("Unknown element cannot be in the query. Check the data.")
-        # one hot integer mask over the input text which specifies the query strings
-        query_mask = [[1 if w == ent else 0 for w in self.__flatten__(inp_row)] for ent in query]
-        # TODO: use query_text and query_text length and pass it back
-        # text_query = [self.data.get_token(tp) for tp in self.dataRows[index].text_query]
-        text_query = []
-        text_target = [START_TOKEN] + self.dataRows[index].text_target + [END_TOKEN]
-        text_target = [self.data.get_token(tp) for tp in text_target]
-
-        # clean graphs for GAT
-        edge_list = self.dataRows[index].story_edges # eg, [(0, 1), (1, 2), (2, 3)]
-        edge_index = list(zip(*edge_list))  # eg, [[0, 1, 2], [1, 2, 3]]
-        edge_index = torch.LongTensor(edge_index) # 2 x num_edges
-        edge_types = self.dataRows[index].edge_types
-        num_ue = len(self.data.unique_edge_dict)
-        num_e = len(edge_list)
-        edge_attr = torch.zeros(num_e, 1).long() # [num_edges, 1]
-        # create a one-hot vector for each edge type
-        for i,e in enumerate(edge_types):
-            edge_attr[i][0] = self.data.unique_edge_dict[e]
-        nodes = list(set([p for x in edge_list for p in x]))
-        x = torch.arange(len(nodes)).unsqueeze(1) # num_nodes x 1
-
-        geo_data = {'x':x, 'edge_index':edge_index, 'edge_attr':edge_attr, 'y':torch.tensor(target), 'num_nodes':len(nodes)}
-        query_edge = [self.dataRows[index].query_edge]
-        num_nodes = [len(nodes)]
-
-        return inp_row, inp_ents, query, text_query, query_mask, target, text_target, inp_row_graph, \
-               sent_lengths, inp_ent_mask, geo_data, query_edge, num_nodes, sentence_pointer, orig_inp, inp_row_pos
-
-    def __flatten__(self, arr):
-        if any(isinstance(el, list) for el in arr):
-            return [a for b in arr for a in b]
-        else:
-            return arr
+        return self.dataRows[index].pattrs
 
     def __len__(self):
         return len(self.dataRows)
