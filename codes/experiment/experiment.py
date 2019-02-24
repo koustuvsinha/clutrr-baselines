@@ -171,11 +171,11 @@ def _run_epochs(experiment):
         test_accs = _run_one_epoch_test(experiment)
         best_epoch_index = experiment.epoch_index - validation_metrics_dict[metric_to_perform_early_stopping].counter
         write_metadata_logs(best_epoch_index=best_epoch_index)
-        print("Best performing model corresponds to epoch id {}".format(best_epoch_index))
+        experiment.config.log.logger.info("Best performing model corresponds to epoch id {}".format(best_epoch_index))
         for key, value in validation_metrics_dict.items():
-            print("{} of the best performing model = {}".format(
+            experiment.config.log.logger.info("{} of the best performing model = {}".format(
                 key, value.get_best_so_far()))
-        print("Best performing epoch id {}".format(best_epoch_index))
+        experiment.config.log.logger.info("Best performing epoch id {}".format(best_epoch_index))
         #print("Test score corresponding to best performing epoch id {}".format(best_epoch_index))
         #print(', '.join(test_acc_per_epoch[best_epoch_index - 1]))
 
@@ -209,7 +209,7 @@ def _run_one_epoch_test(experiment):
                     experiment.comet_ml.log_metric("test_acc_{}".format(test_fl_name), acc, step=epoch)
                 test_accs.append((test_fl_name, acc))
     experiment.config.log.logger.info("------------------------")
-    experiment.config.log.logger.info("> togrep : {} : Epoch: {} Test accuracies: {}, Mean test accuracy : {}".format(
+    experiment.config.log.logger.info("togrep_test ; {} ; Epoch : {} ; Test accuracies : {} ; Mean test accuracy : {}".format(
         experiment.config.general.id, experiment.epoch_index,
         ' ,'.join(['{}:{}'.format(t[0],str(t[1])) for t in test_accs]),
         np.mean([t[1] for t in test_accs])))
@@ -281,15 +281,15 @@ def _run_one_epoch(dataloader, experiment, mode, filename=''):
 
     loss = aggregated_batch_loss / num_examples
     epoch_rel = np.mean(epoch_rel)
+    base_file = filename.split('/')[-1]
     if mode == 'val':
         experiment.validation_metrics['val_acc'].update(epoch_rel)
         experiment.validation_metrics['val_loss'].update(loss)
     experiment.config.log.logger.info(" -------------------------- ")
-    experiment.config.log.logger.info("Mode : {} , File : {}".format(mode, filename))
-    experiment.config.log.logger.info("Loss : {}, Accuracy : {}".format(
+    experiment.config.log.logger.info("togrep_{} ; {} ; Epoch : {} ; Data : {} ; File : {} ; Loss : {} ; Accuracy : {}".format(
+        mode, experiment.config.general.id, experiment.epoch_index, experiment.config.dataset.data_path, filename,
         loss, epoch_rel))
 
-    base_file = filename.split('/')[-1]
     experiment.comet_ml.log_metric("{}_loss".format(base_file), loss, step=experiment.epoch_index)
     experiment.comet_ml.log_metric("{}_accuracy".format(base_file), epoch_rel, step=experiment.epoch_index)
 
