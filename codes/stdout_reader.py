@@ -9,17 +9,22 @@ if __name__ == '__main__':
     # list all the slurm outputs
     results = glob.glob('*.log')
     print("Found {} logs".format(len(results)))
+    modes = ['train','test','val']
     rows = []
     for res in results:
         r_file = open(res).readlines()
         for rf in r_file:
-            if "> togrep :" in rf:
-                sp = rf.split(' : ')
-                m_test_acc = float(sp[-1].lstrip())
-                file_name = sp[1]
-                model_name = file_name.split('_hp')[0]
-                rows.append({'file': file_name, 'model_name': model_name, 'test_acc':m_test_acc})
+            if "togrep_" in rf:
+                sp = rf.split(' ; ')
+                mode = sp[0].rstrip().split('togrep_')[-1]
+                rows.append(
+                    {'mode' : mode,
+                     'experiment_name': sp[1],
+                     'epoch': sp[2].split(' : ')[-1],
+                     'data' : sp[3].split(' : ')[-1],
+                     'file' : sp[4].split(' : ')[-1],
+                     'loss' : sp[5].split(' : ')[-1],
+                     'accuracy' : sp[6].split(' : ')[-1].rstrip()
+                     })
     df = pd.DataFrame(rows)
-    df.to_csv('hyp_results.csv')
-    print("Best hyperparams : ")
-    print(df.sort_values('test_acc', ascending=False).drop_duplicates(['model_name']))
+    df.to_csv('all_results.csv')

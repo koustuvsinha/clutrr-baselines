@@ -209,8 +209,8 @@ def _run_one_epoch_test(experiment):
                     experiment.comet_ml.log_metric("test_acc_{}".format(test_fl_name), acc, step=epoch)
                 test_accs.append((test_fl_name, acc))
     experiment.config.log.logger.info("------------------------")
-    experiment.config.log.logger.info("togrep_test ; {} ; Epoch : {} ; Test accuracies : {} ; Mean test accuracy : {}".format(
-        experiment.config.general.id, experiment.epoch_index,
+    experiment.config.log.logger.info("togrep_final ; {} ; Epoch : {} ; Data : {} ; File : {} ; Test accuracies : {} ; Mean test accuracy : {}".format(
+        experiment.config.general.id, experiment.epoch_index, experiment.config.dataset.data_path, '',
         ' ,'.join(['{}:{}'.format(t[0],str(t[1])) for t in test_accs]),
         np.mean([t[1] for t in test_accs])))
     return test_accs
