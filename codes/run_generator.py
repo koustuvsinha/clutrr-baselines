@@ -55,20 +55,22 @@ if __name__ == '__main__':
         run_file = "#!/bin/sh\n"
         if not args.local:
             run_file += "#SBATCH --job-name=clutrr_{}\n".format(base_data_name)
-            run_file += "#SBATCH --output=/checkpoint/***REMOVED***/jobs/{}.out\n".format(base_data_name)
-            run_file += "#SBATCH --error=/checkpoint/***REMOVED***/jobs/{}.err\n".format(base_data_name)
+            run_file += "#SBATCH --output=/checkpoint/***REMOVED***/jobs/{}_{}_%j.out\n".format(base_data_name, '_'.join(models))
+            run_file += "#SBATCH --error=/checkpoint/***REMOVED***/jobs/{}_{}_%j.err\n".format(base_data_name, '_'.join(models))
             run_file += "#SBATCH --partition=uninterrupted\n"
-            run_file += "#SBATCH --nodes=2\n"
+            run_file += "#SBATCH --nodes=1\n"
             run_file += "#SBATCH --ntasks-per-node={}\n".format(len(models))
             run_file += "#SBATCH --gres=gpu:{}\n".format(len(models))
-            run_file += "#SBATCH --cpus-per-task 24\n"
-            run_file += "#SBATCH --time 04:00:00\n"
-        run_file += "source activate gnnlogic\n"
-        run_file += "cd {}\n".format(script_dir)
-        run_file += "export COMET_API='{}'\n".format(args.comet_api)
-        run_file += "export COMET_WORKSPACE='{}'\n".format(args.comet_workspace)
-        run_file += "export COMET_PROJECT='{}'\n".format(args.comet_project)
-        run_file += "export PYTHONPATH={}\n".format(path)
+            run_file += "#SBATCH --cpus-per-task 4\n"
+            run_file += "#SBATCH --time 06:00:00\n"
+            run_file += "module purge\n"
+            run_file += "module load openmpi/3.0.0/gcc.5.4.0\n"
+            run_file += "module load NCCL/2.4.2-1-cuda.10.0\n"
+            run_file += "module load cuda/10.0\n"
+            run_file += "module load cudnn/v7.4-cuda.10.0\n"
+            #run_file += "module load anaconda3\n"
+        run_file += ". /private/home/***REMOVED***/miniconda3/bin/activate gnnlogic\n"
+        
         if args.local:
             run_file += "cd {}codes/app/\n".format(base_path)
         run_file += "\n"
@@ -76,14 +78,14 @@ if __name__ == '__main__':
         # end of batch file, which should now run the corresponding wrapper
         run_file += "srun --label {}".format(wrapper_file_name)
         print("Writing sbatch file")
-        run_flname = 'run_{}.sh'.format(base_data_name)
+        run_flname = 'run_{}_{}.sh'.format(base_data_name, '_'.join(models))
         with open(os.path.join(script_dir, run_flname), 'w') as fp:
             fp.write(run_file)
         run_flnames.append(run_flname)
         wrapper_file = "#!/bin/sh\n"
         wrapper_file += "export CUDA_VISIBLE_DEVICES=$SLURM_LOCALID\n"
         wrapper_file += "echo $SLURMD_NODENAME $SLURM_JOB_ID $CUDA_VISIBLE_DEVICES\n"
-        wrapper_file += "./{}_model_$(SLURM_LOCALID).sh\n".format(base_data_name)
+        wrapper_file += "./{}_{}_model_$SLURM_LOCALID.sh\n".format(base_data_name, '_'.join(models))
         wrapper_file += "\n"
         with open(os.path.join(script_dir, wrapper_file_name), 'w') as fp:
             fp.write(wrapper_file)
@@ -100,8 +102,18 @@ if __name__ == '__main__':
             config_file['dataset']['data_desc'] = data_desc
             config_file['general']['base_path'] = '/checkpoint/***REMOVED***/clutrr/'
             yaml.dump(config_file, open(os.path.join(base_path, 'config', '{}_{}.yaml'.format(model, base_data_name)),'w'), default_flow_style=False)
-            model_run_file += pre + "python main.py --config_id {}_{}\n".format(model, base_data_name)
-            with open(os.path.join(script_dir, '{}_model_{}.sh'.format(base_data_name, mid)),'w') as fp:
+            # model_run_file += ". /private/home/***REMOVED***/miniconda3/bin/activate gnnlogic\n"
+            model_run_file += "export COMET_API='{}'\n".format(args.comet_api)
+            model_run_file += "export COMET_WORKSPACE='{}'\n".format(args.comet_workspace)
+            model_run_file += "export COMET_PROJECT='{}'\n".format(args.comet_project)
+            model_run_file += "export PYTHONPATH=$PYTHONPATH:{}\n".format(path)
+            model_run_file += "export PATH=/private/home/***REMOVED***/miniconda3/envs/gnnlogic/bin/:$PATH\n"
+            model_run_file += "which python\n"
+            model_run_file +="echo 'Choosing GPU : $CUDA_VISIBLE_DEVICES'\n"
+            run_path = os.path.join(path, 'codes','app')
+            checkpoint_loc = '/checkpoint/***REMOVED***/clutrr/std_outputs/{}_{}.out'.format(model, base_data_name)
+            model_run_file += pre + "python {}/main.py --config_id {}_{} > {}\n".format(run_path, model, base_data_name, checkpoint_loc)
+            with open(os.path.join(script_dir, '{}_{}_model_{}.sh'.format(base_data_name, '_'.join(models), mid)),'w') as fp:
                 fp.write(model_run_file)
             ct += 1
     print("Done, now writing the meta runner")

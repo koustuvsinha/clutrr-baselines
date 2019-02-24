@@ -59,7 +59,7 @@ class DataUtility():
     """
     def __init__(self,
                  config,
-                 num_workers=1,
+                 num_workers=4,
                  common_dict=True):
         """
 
