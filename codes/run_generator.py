@@ -117,7 +117,7 @@ if __name__ == '__main__':
             model_run_file += "}\n"
             model_run_file += "cd {}\n".format(base_path)
             if args.local:
-                model_run_file += "echo '$(timestamp) Start running {}'".format(model_run_fl_name)
+                model_run_file += "echo \"$(timestamp) Start running {}\"\n".format(model_run_fl_name)
             run_path = os.path.join(path, 'codes','app')
             checkpoint_loc = '/checkpoint/***REMOVED***/clutrr/std_outputs/{}_{}.out'.format(model, base_data_name)
             model_run_file += pre + "python {}/main.py --config_id {}_{} > {}\n".format(run_path, model, base_data_name, checkpoint_loc)
