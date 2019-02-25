@@ -111,8 +111,11 @@ if __name__ == '__main__':
             model_run_file += "export PYTHONPATH=$PYTHONPATH:{}\n".format(path)
             model_run_file += "export PATH=/private/home/***REMOVED***/miniconda3/envs/gnnlogic/bin/:$PATH\n"
             model_run_file += "which python\n"
-            model_run_file += "echo 'Choosing GPU : $(CUDA_VISIBLE_DEVICES)'\n"
-            model_run_file += "timestamp() { date +\"%Y-%m-%d_%H-%M-%S\" }\n"
+            model_run_file += "echo 'Choosing GPU'\n"
+            model_run_file += "timestamp() {\n"
+            model_run_file += "  date +\"%Y-%m-%d_%H-%M-%S\"\n"
+            model_run_file += "}\n"
+            model_run_file += "cd {}\n".format(base_path)
             if args.local:
                 model_run_file += "echo '$(timestamp) Start running {}'".format(model_run_fl_name)
             run_path = os.path.join(path, 'codes','app')
