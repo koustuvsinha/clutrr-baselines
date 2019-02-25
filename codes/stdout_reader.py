@@ -15,6 +15,8 @@ if __name__ == '__main__':
     # list all the slurm outputs
     # datasets = pd.read_csv(os.path.join(base_path, 'data','dataset_details.csv'))
     data_exp = {}
+    all_datasets = glob.glob(os.path.join(base_path, 'data', 'data*'))
+    all_datasets = set([dir.split('/')[-1] for dir in all_datasets if os.path.isdir(dir)])
 
     results = glob.glob('*.log')
     print("Found {} logs".format(len(results)))
@@ -42,12 +44,17 @@ if __name__ == '__main__':
                      'loss' : sp[5].split(' : ')[-1],
                      'accuracy' : sp[6].split(' : ')[-1].rstrip()
                      })
-            if data not in data_exp:
-                data_exp[data] = {}
-            if experiment_name not in data_exp[data]:
-                data_exp[data][experiment_name] = 0
-            data_exp[data][experiment_name] = ep_max_epoch
+            if data in all_datasets:
+                if data not in data_exp:
+                    data_exp[data] = {}
+                if experiment_name not in data_exp[data]:
+                    data_exp[data][experiment_name] = 0
+                data_exp[data][experiment_name] = ep_max_epoch
     df = pd.DataFrame(rows)
     df.to_csv('all_results_runs.csv')
+    not_complete = list(all_datasets - set(data_exp.keys()))
+    data_exp['Not Complete'] = not_complete
     pp.pprint(data_exp)
+    print("Total datasets : {}, Datasets ran on : {}".format(len(all_datasets),len(data_exp)))
+    print("Not complete : {}".format(not_complete))
     json.dump(data_exp, open('run_metrics.json','w'))
