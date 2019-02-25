@@ -136,7 +136,7 @@ if __name__ == '__main__':
                 mt +=1
         else:
             for mfile in local_gpu_jobs[gpu]:
-                meta_file += "./{}\n".format(mfile)
+                meta_file += ". {}\n".format(mfile)
                 mt +=1
         with open(os.path.join(script_dir, 'meta_run_{}.sh'.format(gpu)),'w') as fp:
             fp.write(meta_file)
