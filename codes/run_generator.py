@@ -16,6 +16,7 @@ if __name__ == '__main__':
     parser.add_argument('--loc', type=str, default='data/')
     parser.add_argument('--models', type=str, default='bilstm_atten,bilstm_max,bilstm_mean,bilstm_concat,gat_clean,mac,rn,rn_tpr')
     parser.add_argument('--local', action='store_true', help="If true, run on machines not on slurm")
+    parser.add_argument('--cluster', type=str, default='graham', help="graham/fair")
     parser.add_argument('--gpus',type=str, default='0', help='works in local, run jobs on these gpus')
     parser.add_argument('--stdout', type=str, default='std_outputs', help='folder to store std outputs')
 
@@ -23,6 +24,7 @@ if __name__ == '__main__':
 
     models = args.models.split(',')
     gpus = args.gpus.split(',')
+    local_gpu_jobs = {gpu:[] for gpu in gpus}
     if not os.path.exists(args.stdout):
         os.makedirs(args.stdout)
     if not args.local and len(gpus) > 1:
@@ -36,7 +38,8 @@ if __name__ == '__main__':
     # file paths
     path = os.path.dirname(os.path.realpath(__file__)).split('/codes')[0]
     config_dir = os.path.join(path, "config")
-    script_dir = os.path.join(path, "scripts")
+    script_subf = 'local' if args.local else 'slurm'
+    script_dir = os.path.join(path, "scripts", script_subf)
     if not os.path.exists(script_dir):
         os.makedirs(script_dir)
 
@@ -51,7 +54,6 @@ if __name__ == '__main__':
         f_key = list(data_config['args'].keys())[0]
         holdout = data_config['args'][f_key]['holdout'] if 'holdout' in data_config['args'][f_key] else ''
         data_desc = 'train_{}.test_{}.holdout_{}'.format(train_task, test_task, holdout)
-        gpu_choice = random.choice(gpus)
         run_file = "#!/bin/sh\n"
         if not args.local:
             run_file += "#SBATCH --job-name=clutrr_{}_{}\n".format(base_data_name, '_'.join(models))
@@ -69,28 +71,26 @@ if __name__ == '__main__':
             run_file += "module load cuda/10.0\n"
             run_file += "module load cudnn/v7.4-cuda.10.0\n"
             #run_file += "module load anaconda3\n"
-        run_file += ". /private/home/***REMOVED***/miniconda3/bin/activate gnnlogic\n"
-        
-        if args.local:
-            run_file += "cd {}codes/app/\n".format(base_path)
-        run_file += "\n"
+            run_file += "\n"
 
-        # end of batch file, which should now run the corresponding wrapper
-        run_file += "srun --label {}".format(wrapper_file_name)
-        print("Writing sbatch file")
-        run_flname = 'run_{}_{}.sh'.format(base_data_name, '_'.join(models))
-        with open(os.path.join(script_dir, run_flname), 'w') as fp:
-            fp.write(run_file)
-        run_flnames.append(run_flname)
-        wrapper_file = "#!/bin/sh\n"
-        #wrapper_file += "export CUDA_VISIBLE_DEVICES=$SLURM_LOCALID\n"
-        wrapper_file += "echo $SLURMD_NODENAME $SLURM_JOB_ID $CUDA_VISIBLE_DEVICES\n"
-        wrapper_file += "./{}_{}_model_$SLURM_LOCALID.sh\n".format(base_data_name, '_'.join(models))
-        wrapper_file += "\n"
-        with open(os.path.join(script_dir, wrapper_file_name), 'w') as fp:
-            fp.write(wrapper_file)
+            # end of batch file, which should now run the corresponding wrapper
+            run_file += "srun --label {}".format(wrapper_file_name)
+            print("Writing sbatch file")
+            run_flname = 'run_{}_{}.sh'.format(base_data_name, '_'.join(models))
+            with open(os.path.join(script_dir, run_flname), 'w') as fp:
+                fp.write(run_file)
+            run_flnames.append(run_flname)
+            wrapper_file = "#!/bin/sh\n"
+            #wrapper_file += "export CUDA_VISIBLE_DEVICES=$SLURM_LOCALID\n"
+            wrapper_file += "echo $SLURMD_NODENAME $SLURM_JOB_ID $CUDA_VISIBLE_DEVICES\n"
+            wrapper_file += "./{}_{}_model_$SLURM_LOCALID.sh\n".format(base_data_name, '_'.join(models))
+            wrapper_file += "\n"
+            with open(os.path.join(script_dir, wrapper_file_name), 'w') as fp:
+                fp.write(wrapper_file)
+
 
         for mid, model in enumerate(models):
+            gpu_choice = random.choice(gpus)
             if args.local:
                 pre = 'CUDA_VISIBLE_DEVICES={} '.format(gpu_choice)
             else:
@@ -113,19 +113,23 @@ if __name__ == '__main__':
             run_path = os.path.join(path, 'codes','app')
             checkpoint_loc = '/checkpoint/***REMOVED***/clutrr/std_outputs/{}_{}.out'.format(model, base_data_name)
             model_run_file += pre + "python {}/main.py --config_id {}_{} > {}\n".format(run_path, model, base_data_name, checkpoint_loc)
-            with open(os.path.join(script_dir, '{}_{}_model_{}.sh'.format(base_data_name, '_'.join(models), mid)),'w') as fp:
+            model_run_fl_name = os.path.join(script_dir, '{}_{}_model_{}.sh'.format(base_data_name, '_'.join(models), mid))
+            with open(model_run_fl_name,'w') as fp:
                 fp.write(model_run_file)
+            local_gpu_jobs[gpu_choice].append(model_run_fl_name)
             ct += 1
     print("Done, now writing the meta runner")
     mt = 0
     for gpu in gpus:
         meta_file = "#!/bin/sh\n"
-        for rf in run_flnames:
-            if not args.local:
+        if not args.local:
+            for rf in run_flnames:
                 meta_file += "sbatch {}\n".format(rf)
-            else:
-                meta_file += "./{}\n".format(rf)
-            mt +=1
+                mt +=1
+        else:
+            for mfile in local_gpu_jobs[gpu]:
+                meta_file += "./{}\n".format(mfile)
+                mt +=1
         with open(os.path.join(script_dir, 'meta_run_{}.sh'.format(gpu)),'w') as fp:
             fp.write(meta_file)
     print("Number of experiments to run : {}".format(ct))
