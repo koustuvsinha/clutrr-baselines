@@ -11,6 +11,7 @@ from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from codes.baselines.lstm.basic import SimpleEncoder
 from codes.net.batch import Batch
 from codes.net.base_net import Net
+import numpy as np
 import pdb
 
 
@@ -39,6 +40,45 @@ class TPREncoder(Net):
         data = self.embedding(batch.inp) # B x sent x dim
         return data * positions, None # B x sent_len x dim
 
+class RNSentReader(Net):
+    """
+    Read sentences and return a sentence object for each sentences
+    """
+    def __init__(self, model_config):
+        super().__init__(model_config)
+        self.init_embeddings()
+
+        if model_config.encoder.rn.reader == 'lstm':
+            self.reader = SimpleEncoder(model_config, shared_embeddings=self.embedding)
+        elif model_config.encoder.rn.reader == 'tpr':
+            # Reader module as https://arxiv.org/pdf/1811.12143.pdf
+            # basically add a position embedding to the input sentence
+            self.reader = TPREncoder(model_config, shared_embeddings=self.embedding)
+
+        # can be either max or mean
+        self.pooling = model_config.encoder.pooling
+        if self.pooling not in ['max', 'mean']:
+            raise NotImplementedError("RNSentReader {} pooling not implemented".format(self.pooling))
+
+    def forward(self, batch):
+        inp = batch.s_inp # B x s x w
+        B, sent_len, word_len = inp.size()
+        inp = inp.view(-1, word_len) # (B x s) x sent_len
+        inp_len = [s for sl in batch.sent_lengths for s in sl] # flatten
+        reader_batch = Batch(inp=inp, inp_lengths=inp_len)
+        outp,_ =  self.reader(reader_batch) # (B x s) x w x dim
+        question_batch = Batch(inp=batch.inp, inp_lengths=batch.inp_lengths)
+        q_outp,_ = self.reader(question_batch) # B x len x dim
+        if self.pooling == 'mean':
+            sent_len_a = torch.FloatTensor(inp_len.copy()).unsqueeze(1).to(outp.device)
+            emb = torch.sum(outp, 1).squeeze(0)
+            emb = emb / sent_len_a.expand_as(emb) # (B x s) x dim
+        else:
+            emb = torch.max(outp, 1)[0]
+        outp = emb.view(B, sent_len, -1)  # B x s x dim
+        return outp, q_outp
+
+
 
 
 class RelationNetworkEncoder(Net):
@@ -52,15 +92,10 @@ class RelationNetworkEncoder(Net):
 
         bidirectional_mult = 1
         if model_config.encoder.rn.reader == 'lstm':
-            self.reader = SimpleEncoder(model_config, shared_embeddings=self.embedding)
             if model_config.encoder.bidirectional:
                 bidirectional_mult = 2
-        elif model_config.encoder.rn.reader == 'tpr':
-            # Reader module as https://arxiv.org/pdf/1811.12143.pdf
-            # basically add a position embedding to the input sentence
-            self.reader = TPREncoder(model_config, shared_embeddings=self.embedding)
-        else:
-            raise NotImplementedError("model.encoder.rn.reader not defined")
+
+        self.reader = RNSentReader(model_config)
 
         self.g_theta = self.get_mlp_h(model_config.embedding.dim * bidirectional_mult * 4, model_config.encoder.rn.g_theta_dim,
                                       num_layers=4)
@@ -99,14 +134,14 @@ class RelationNetworkEncoder(Net):
         :return:
         """
         # read the data through a bidirectional encoder
-        outp,_ = self.reader(batch) # B x length x dim
+        outp,q_outp = self.reader(batch) # B x length x dim
 
         max_len = outp.size(1)
         batch_size = outp.size(0)
         # how to add the question entity
         # lets add the question (for which we have two entities) directly concatenated
         # in the object pairs
-        batch.encoder_outputs = outp
+        batch.encoder_outputs = q_outp
         query = self.calculate_query(batch) # B x 1 x (2*dim)
         query = query.repeat(1, max_len, 1) # B x len x (2*dim)
         query = torch.unsqueeze(query, 2) # B x len x 1 x (2*dim)
@@ -127,7 +162,7 @@ class RelationNetworkEncoder(Net):
 
         # break this down into minibatches
         k = 5
-        """
+        
 
         x_g = []
         for bi in range(B):
@@ -153,7 +188,7 @@ class RelationNetworkEncoder(Net):
 
 
         """
-        # combine all pairs of words
+        # combine all pairs of sentences
         x_i = torch.unsqueeze(outp, 1) # B x 1 x length x dim
         x_i = x_i.repeat(1, max_len, 1, 1) # B x len x len x dim
         x_j = torch.unsqueeze(outp, 2) # B x len x 1 x dim
@@ -169,7 +204,7 @@ class RelationNetworkEncoder(Net):
         # reshape and sum
         x_g = x_.view(batch_size, -1, self.model_config.encoder.rn.g_theta_dim) # B x (len x len) x g_dim
         x_g = x_g.sum(1) # B x g_dim
-        """
+
 
         # apply f
         x_f = self.f_theta_2(self.f_theta_1(x_g)) # B x f_dim

@@ -67,7 +67,7 @@ model:
     nlayers: 2
     bidirectional: true
     dropout: 0
-    pooling: maxpool # can be attention or maxpool
+    pooling: mean # can be attention or maxpool
     tmp_name: codes.models.gnn.encoder.GraphEncoder
     rn:
       g_theta_dim: 64

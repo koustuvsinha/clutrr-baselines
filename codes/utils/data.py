@@ -479,15 +479,17 @@ class DataUtility():
             orig_inp = dataRow.story
             inp_row_graph = dataRow.story_graph
             inp_row_pos = []
-            if self.sentence_mode:
-                sent_lengths = [len(sent) for sent in dataRow.story_sents]
-                inp_row = [[self.get_token(word) for word in sent] for sent in dataRow.story_sents]
-                inp_ents = [[id for id in sent if id in self.entity_ids] for sent in inp_row]
-                inp_row_pos = [[widx + 1 for widx, word in enumerate(sent)] for sent in inp_row]
-            else:
-                sent_lengths = [len(dataRow.story)]
-                inp_row = [self.get_token(word) for word in dataRow.story]
-                inp_ents = list(set([id for id in inp_row if id in self.entity_ids]))
+
+            # for sentence tokenizations
+            sent_lengths = [len(sent) for sent in dataRow.story_sents]
+            s_inp_row = [[self.get_token(word) for word in sent] for sent in dataRow.story_sents]
+            #s_inp_ents = [[id for id in sent if id in self.entity_ids] for sent in inp_row]
+            #s_inp_row_pos = [[widx + 1 for widx, word in enumerate(sent)] for sent in inp_row]
+
+            # for word tokenizations
+            # sent_lengths = [len(dataRow.story)]
+            inp_row = [self.get_token(word) for word in dataRow.story]
+            inp_ents = list(set([id for id in inp_row if id in self.entity_ids]))
 
             ## calculate one-hot mask for entities which are used in this row
             flat_inp_ents = inp_ents
@@ -550,7 +552,7 @@ class DataUtility():
                         'num_nodes': len(nodes)}
             query_edge = [dataRow.query_edge]
             num_nodes = [len(nodes)]
-            dataRow.pattrs = [inp_row, inp_ents, query, text_query, query_mask, target, text_target, inp_row_graph,
+            dataRow.pattrs = [inp_row, s_inp_row, inp_ents, query, text_query, query_mask, target, text_target, inp_row_graph,
                sent_lengths, inp_ent_mask, geo_data, query_edge, num_nodes, sentence_pointer, orig_inp, inp_row_pos]
         return dataRows
 
@@ -702,8 +704,9 @@ def collate_fn(data):
     """
     ## sort dataset by inp sentences
     data.sort(key=lambda x: len(x[0]), reverse=True)
-    inp_data, inp_ents, query, text_query, query_mask, target, text_target, inp_graphs, sent_lengths, inp_ent_mask, geo_data, query_edge, num_nodes, *_ = zip(*data)
+    inp_data, s_inp_data, inp_ents, query, text_query, query_mask, target, text_target, inp_graphs, sent_lengths, inp_ent_mask, geo_data, query_edge, num_nodes, *_ = zip(*data)
     inp_data, inp_lengths = simple_merge(inp_data)
+    s_inp_data, sent_lengths = sent_merge(s_inp_data, sent_lengths)
     # outp_data, outp_lengths = simple_merge(outp_data)
     text_target, text_target_lengths = simple_merge(text_target)
 
@@ -723,6 +726,7 @@ def collate_fn(data):
     # prepare batch
     batch = Batch(
         inp=inp_data,
+        s_inp=s_inp_data,
         inp_lengths=inp_lengths,
         sent_lengths=sent_lengths,
         target=target,
@@ -741,14 +745,29 @@ def collate_fn(data):
     return batch
 
 def sent_merge(rows, sent_lengths):
-    lengths = [len(row) for row in rows]
-    max_sent_l = max([n for sentl in sent_lengths for n in sentl])
+    """
+    :param rows: [[[a,b],[c,d,e]], [[b,c,d,e],[d,e,f],[g,t]]]
+    :param sent_lengths: [[2,3],[4,3,2]]
+
+    padded_rows = 2 x 3 x 4
+    :return:
+    """
+    lengths = [len(row) for row in rows] # number of sent in each batch
+    max_sent_l = max([n for sentl in sent_lengths for n in sentl]) # max number of words in each sent
     padded_rows = torch.zeros(len(rows), max(lengths), max_sent_l).long()
     for i,row in enumerate(rows):
         end = lengths[i]
         for j,sent_row in enumerate(row):
             padded_rows[i, j, :sent_lengths[i][j]] = torch.LongTensor(sent_row)
-    return padded_rows, lengths
+    # pad sent lengths
+    padded_lens = []
+    for srow in sent_lengths:
+        if len(srow) == max(lengths):
+            padded_lens.append(srow)
+        else:
+            srow.extend([0] * (max(lengths) - len(srow)))
+            padded_lens.append(srow)
+    return padded_rows, padded_lens
 
 def sent_collate_fn(data):
     """

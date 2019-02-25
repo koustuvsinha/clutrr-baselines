@@ -133,3 +133,4 @@ data/*
 codes/runs/
 codes/*.sh
 *.zip
+scripts/

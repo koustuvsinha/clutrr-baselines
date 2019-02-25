@@ -8,8 +8,9 @@ class Batch:
     Placeholder class for one batch
     """
     def __init__(self,
-            inp=None,                   # story input, (B x s) / (B x s x w) in sentence mode
-            inp_lengths=None,           # length of story, (B x 1) / (B x s x 1) in sentence mode
+            inp=None,                   # story input, (B x s)
+            inp_lengths=None,           # length of story, (B x 1)
+            s_inp=None,  # story input in sentences (B x s x w) in sentence mode
             sent_lengths=None,          # B x s x 1
             target=None,                # target of the relation, (B x 1)
             text_target = None,         # target in text, (B x t)
@@ -53,6 +54,7 @@ class Batch:
 
         self.inp = inp
         self.inp_lengths = inp_lengths
+        self.s_inp = s_inp
         self.sent_lengths = sent_lengths
         self.target = target
         self.text_target = text_target
@@ -80,6 +82,7 @@ class Batch:
 
     def to_device(self, device):
         self.inp = self.inp.to(device)
+        self.s_inp = self.s_inp.to(device)
         self.target = self.target.to(device)
         self.text_target = self.text_target.to(device)
         self.text_target_lengths = self.text_target.to(device)

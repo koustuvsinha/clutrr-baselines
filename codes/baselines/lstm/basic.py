@@ -6,6 +6,7 @@ from codes.net.base_net import Net
 from codes.utils.util import check_id_emb
 from codes.net.attention import Attn
 from torch.nn import functional as F
+import numpy as np
 import pdb
 
 class SimpleEncoder(Net):
@@ -31,13 +32,29 @@ class SimpleEncoder(Net):
 
     def forward(self, batch):
         data = batch.inp
-        data_lengths = batch.inp_lengths
+        inp_len = np.array(batch.inp_lengths)
         data = self.embedding(data)
-        data_pack = pack_padded_sequence(data, data_lengths, batch_first=True)
+        # sort
+        inp_len_sorted, idx_sort = np.sort(inp_len)[::-1], np.argsort(-inp_len)
+        inp_len_sorted = inp_len_sorted.copy()
+        idx_unsort = np.argsort(idx_sort)
+
+        idx_sort = torch.from_numpy(idx_sort).to(data.device)
+        data = data.index_select(0, idx_sort)
+        inp_len_sorted_nonzero_idx = np.nonzero(inp_len_sorted)[0]
+        inp_len_sorted_nonzero_idx = torch.from_numpy(inp_len_sorted_nonzero_idx).to(data.device)
+        non_zero_data = data.index_select(0, inp_len_sorted_nonzero_idx)
+        data_pack = pack_padded_sequence(non_zero_data, inp_len_sorted[inp_len_sorted_nonzero_idx], batch_first=True)
         outp, hidden_rep = self.lstm(data_pack)
         outp, _ = pad_packed_sequence(outp, batch_first=True)
         outp = outp.contiguous()
-        return outp.contiguous(), hidden_rep
+        outp_l = torch.zeros((data.size(0), data.size(1), outp.size(2))).to(outp.device)
+        outp_l[inp_len_sorted_nonzero_idx] = outp
+        # unsort
+        idx_unsort = torch.from_numpy(idx_unsort).to(outp_l.device)
+        outp_l = outp_l.index_select(0, idx_unsort)
+
+        return outp_l.contiguous(), hidden_rep
 
 class SimpleDecoder(Net):
     """
