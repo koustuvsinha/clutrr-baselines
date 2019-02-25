@@ -322,6 +322,7 @@ class DataUtility():
             self.assign_wordids(words)
 
         # get adj graph
+        """
         ct = 0
         if mode == 'train':
             for i, row in data.iterrows():
@@ -341,7 +342,7 @@ class DataUtility():
 
         # update the max sentence length
         self.max_word_length = max(self.max_word_length, max_word_length)
-
+        """
 
 
     def tokenize(self, sent):
@@ -477,7 +478,7 @@ class DataUtility():
         """
         for dataRow in dataRows:
             orig_inp = dataRow.story
-            inp_row_graph = dataRow.story_graph
+            inp_row_graph = [] #dataRow.story_graph
             inp_row_pos = []
             if self.sentence_mode:
                 sent_lengths = [len(sent) for sent in dataRow.story_sents]
