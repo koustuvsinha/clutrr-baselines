@@ -45,8 +45,9 @@ class RNSentReader(Net):
     """
     Read sentences and return a sentence object for each sentences
     """
-    def __init__(self, model_config):
+    def __init__(self, model_config, shared_embedding):
         super().__init__(model_config)
+        self.embedding = shared_embedding
 
         if model_config.encoder.rn.reader == 'lstm':
             self.reader = SimpleEncoder(model_config, shared_embeddings=self.embedding)
@@ -91,13 +92,13 @@ class RelationNetworkEncoder(Net):
     """
     def __init__(self, model_config, shared_embeddings=None):
         super().__init__(model_config)
-
+        self.init_embeddings()
         bidirectional_mult = 1
         if model_config.encoder.rn.reader == 'lstm':
             if model_config.encoder.bidirectional:
                 bidirectional_mult = 2
 
-        self.reader = RNSentReader(model_config)
+        self.reader = RNSentReader(model_config, shared_embeddings=self.embedding)
 
         self.g_theta = self.get_mlp_h(model_config.embedding.dim * bidirectional_mult * 4, model_config.encoder.rn.g_theta_dim,
                                       num_layers=4)
