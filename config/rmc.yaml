@@ -10,7 +10,7 @@ general:
   mode: train # can be train or infer
 dataset:
   base_url: http://localhost:9300
-  data_path: data_v3
+  data_path: data_f876bad6
   save_path: dtp.pkl
   load_save_path: false
   load_dictionary: false
@@ -125,14 +125,15 @@ model:
       write: 0.2
   RMC:
     mem_slots: 1
-    head_size: 64
-    num_heads: 1
+    head_size: 45
+    num_heads: 4
     num_blocks: 1
     forget_bias: 1
     input_bias: 0
     gate_style: unit   # memory, None
     key_size: None     # Defaults to None, in which case we use `head_size`
     return_all_outputs: False
+    attention_mlp_layers: 3
 
 log:
   file_path: ''
@@ -140,9 +141,9 @@ log:
   predictions: False # if true, save predicted examples in log folder
   test_each_epoch: False # if true, log the test accuracies per epoch
   comet:
-    api_key: # put the comet api key here
-    project_name: # comet project name
-    workspace: # comet workspace
-    disabled: # disable when debugging
+    api_key: ***REMOVED*** # put the comet api key here
+    project_name: clutrr # comet project name
+    workspace: ***REMOVED*** # comet workspace
+    disabled: false # disable when debugging
 plot:
   base_path: ''

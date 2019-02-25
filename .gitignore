@@ -119,6 +119,7 @@ config/*
 !config/bilstm_max.yaml
 !config/bilstm_concat.yaml
 !config/bilstm_atten.yaml
+!config/rmc.yaml
 !config/mac.yaml
 !config/rn.yaml
 !config/rn_tpr.yaml
