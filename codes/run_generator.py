@@ -115,7 +115,7 @@ if __name__ == '__main__':
             model_run_file += "timestamp() {\n"
             model_run_file += "  date +\"%Y-%m-%d_%H-%M-%S\"\n"
             model_run_file += "}\n"
-            model_run_file += "cd {}\n".format(base_path)
+            model_run_file += "cd {}/codes/app\n".format(base_path)
             if args.local:
                 model_run_file += "echo \"$(timestamp) Start running {}\"\n".format(model_run_fl_name)
             run_path = os.path.join(path, 'codes','app')
