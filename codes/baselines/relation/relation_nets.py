@@ -11,6 +11,7 @@ from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from codes.baselines.lstm.basic import SimpleEncoder
 from codes.net.batch import Batch
 from codes.net.base_net import Net
+from addict import Dict
 import numpy as np
 import pdb
 
@@ -134,6 +135,7 @@ class RelationNetworkEncoder(Net):
         :return:
         """
         # read the data through a bidirectional encoder
+        #pdb.set_trace()
         outp,q_outp = self.reader(batch) # B x length x dim
 
         max_len = outp.size(1)
@@ -141,8 +143,11 @@ class RelationNetworkEncoder(Net):
         # how to add the question entity
         # lets add the question (for which we have two entities) directly concatenated
         # in the object pairs
-        batch.encoder_outputs = q_outp
-        query = self.calculate_query(batch) # B x 1 x (2*dim)
+        min_batch = Dict()
+        min_batch.encoder_outputs = q_outp
+        min_batch.query_mask = batch.query_mask
+        #batch.encoder_outputs = q_outp
+        query = self.calculate_query(min_batch) # B x 1 x (2*dim)
         query = query.repeat(1, max_len, 1) # B x len x (2*dim)
         query = torch.unsqueeze(query, 2) # B x len x 1 x (2*dim)
 
