@@ -45,9 +45,9 @@ class RNSentReader(Net):
     """
     Read sentences and return a sentence object for each sentences
     """
-    def __init__(self, model_config, shared_embedding):
+    def __init__(self, model_config, shared_embeddings=None):
         super().__init__(model_config)
-        self.embedding = shared_embedding
+        self.embedding = shared_embeddings
 
         if model_config.encoder.rn.reader == 'lstm':
             self.reader = SimpleEncoder(model_config, shared_embeddings=self.embedding)
