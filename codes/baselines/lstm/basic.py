@@ -43,6 +43,7 @@ class SimpleEncoder(Net):
         data = data.index_select(0, idx_sort)
         inp_len_sorted_nonzero_idx = np.nonzero(inp_len_sorted)[0]
         inp_len_sorted_nonzero_idx = torch.from_numpy(inp_len_sorted_nonzero_idx).to(data.device)
+        inp_len_sorted = torch.from_numpy(inp_len_sorted).to(data.device)
         non_zero_data = data.index_select(0, inp_len_sorted_nonzero_idx)
         data_pack = pack_padded_sequence(non_zero_data, inp_len_sorted[inp_len_sorted_nonzero_idx], batch_first=True)
         outp, hidden_rep = self.lstm(data_pack)
