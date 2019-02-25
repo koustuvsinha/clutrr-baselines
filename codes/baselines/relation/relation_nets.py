@@ -111,6 +111,48 @@ class RelationNetworkEncoder(Net):
         query = query.repeat(1, max_len, 1) # B x len x (2*dim)
         query = torch.unsqueeze(query, 2) # B x len x 1 x (2*dim)
 
+        # problem: if max_len is high, then all pair combination is difficult
+        # solution: or just run it per batch
+        B = outp.size(0)
+
+        """
+        o_i = torch.arange(max_len).unsqueeze(0).unsqueeze(2).repeat(B, 1, 1) # B x length x 1
+        o_i = torch.unsqueeze(o_i, 1) # B x 1 x length x 1
+        o_i = o_i.repeat(1, max_len, 1, 1) # B x length x length x 1
+        o_j = torch.arange(max_len).unsqueeze(0).unsqueeze(2).repeat(B, 1, 1) # B x length x 1
+        o_j = torch.unsqueeze(o_j, 2) # B x length x 1 x 1
+        o_j = o_j.repeat(1, 1, max_len, 1) # B x length x length x 1
+        o_ij = torch.cat([o_i, o_j], 3)
+        o_ij = o_ij.view(B * max_len * max_len, -1) # (Bxlenxlen) x (dim*3)
+
+        # break this down into minibatches
+        k = 5
+        """
+
+        x_g = []
+        for bi in range(B):
+            x_ib = torch.unsqueeze(outp[bi], 0) # 1 x len x dim
+            x_ib = x_ib.repeat(max_len, 1, 1)  # len x len x dim
+            x_jb = torch.unsqueeze(outp[bi], 1)  # len x 1 x dim
+            q_b = query[bi] # len x 1 x (dim * 2)
+            x_jb = torch.cat([x_jb, q_b], 2)  # len x 1 x (dim * 3)
+            x_jb = x_jb.repeat(1, max_len, 1)  # len x len x (dim * 3)
+
+            # concat all together
+            x_full_b = torch.cat([x_ib, x_jb], 2) # len x len x (dim * 4)
+
+            # reshape for passing through the network
+            x_b = x_full_b.view(max_len * max_len, -1)  # (lenxlen) x (dim*3)
+            x_b = self.g_theta(x_b)
+            # reshape and sum
+            x_gb = x_b.view(-1, self.model_config.encoder.rn.g_theta_dim)  # (len x len) x g_dim
+            x_gb = x_gb.sum(0).unsqueeze(0)  # 1 x g_dim
+            x_g.append(x_gb)
+
+        x_g = torch.cat(x_g, dim=0)
+
+
+        """
         # combine all pairs of words
         x_i = torch.unsqueeze(outp, 1) # B x 1 x length x dim
         x_i = x_i.repeat(1, max_len, 1, 1) # B x len x len x dim
@@ -127,9 +169,11 @@ class RelationNetworkEncoder(Net):
         # reshape and sum
         x_g = x_.view(batch_size, -1, self.model_config.encoder.rn.g_theta_dim) # B x (len x len) x g_dim
         x_g = x_g.sum(1) # B x g_dim
+        """
 
         # apply f
         x_f = self.f_theta_2(self.f_theta_1(x_g)) # B x f_dim
+
 
         return x_f, None
 
