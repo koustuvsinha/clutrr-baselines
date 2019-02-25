@@ -47,7 +47,6 @@ class RNSentReader(Net):
     """
     def __init__(self, model_config):
         super().__init__(model_config)
-        self.init_embeddings()
 
         if model_config.encoder.rn.reader == 'lstm':
             self.reader = SimpleEncoder(model_config, shared_embeddings=self.embedding)
@@ -64,17 +63,20 @@ class RNSentReader(Net):
     def forward(self, batch):
         inp = batch.s_inp # B x s x w
         B, sent_len, word_len = inp.size()
-        inp = inp.view(-1, word_len) # (B x s) x sent_len
+        inp = inp.view(-1, word_len) # (B x sent_len) x w
         inp_len = [s for sl in batch.sent_lengths for s in sl] # flatten
         reader_batch = Batch(inp=inp, inp_lengths=inp_len)
         outp,_ =  self.reader(reader_batch) # (B x s) x w x dim
         question_batch = Batch(inp=batch.inp, inp_lengths=batch.inp_lengths)
         q_outp,_ = self.reader(question_batch) # B x len x dim
         if self.pooling == 'mean':
-            sent_len_a = torch.FloatTensor(inp_len.copy()).unsqueeze(1).to(outp.device)
+            inp_len = np.array(inp_len)
+            inp_len[inp_len == 0] = 1
+            sent_len_a = torch.from_numpy(np.array(inp_len)).unsqueeze(1).to(outp.device)
             emb = torch.sum(outp, 1).squeeze(0)
             emb = emb / sent_len_a.expand_as(emb) # (B x s) x dim
         else:
+            outp[outp == 0] = -1e9
             emb = torch.max(outp, 1)[0]
         outp = emb.view(B, sent_len, -1)  # B x s x dim
         return outp, q_outp
@@ -89,7 +91,6 @@ class RelationNetworkEncoder(Net):
     """
     def __init__(self, model_config, shared_embeddings=None):
         super().__init__(model_config)
-        self.init_embeddings()
 
         bidirectional_mult = 1
         if model_config.encoder.rn.reader == 'lstm':
