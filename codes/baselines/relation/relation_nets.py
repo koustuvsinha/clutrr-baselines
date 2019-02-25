@@ -73,7 +73,7 @@ class RNSentReader(Net):
         if self.pooling == 'mean':
             inp_len = np.array(inp_len)
             inp_len[inp_len == 0] = 1
-            sent_len_a = torch.from_numpy(np.array(inp_len)).unsqueeze(1).to(outp.device)
+            sent_len_a = torch.from_numpy(np.array(inp_len)).unsqueeze(1).to(outp.device).float()
             emb = torch.sum(outp, 1).squeeze(0)
             emb = emb / sent_len_a.expand_as(emb) # (B x s) x dim
         else:
