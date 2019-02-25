@@ -103,17 +103,22 @@ if __name__ == '__main__':
             config_file['general']['base_path'] = '/checkpoint/***REMOVED***/clutrr/'
             yaml.dump(config_file, open(os.path.join(base_path, 'config', '{}_{}.yaml'.format(model, base_data_name)),'w'), default_flow_style=False)
             # model_run_file += ". /private/home/***REMOVED***/miniconda3/bin/activate gnnlogic\n"
+            model_run_fl_name = os.path.join(script_dir,
+                                             '{}_{}_model_{}.sh'.format(base_data_name, '_'.join(models), mid))
             model_run_file += "export COMET_API='{}'\n".format(args.comet_api)
             model_run_file += "export COMET_WORKSPACE='{}'\n".format(args.comet_workspace)
             model_run_file += "export COMET_PROJECT='{}'\n".format(args.comet_project)
             model_run_file += "export PYTHONPATH=$PYTHONPATH:{}\n".format(path)
             model_run_file += "export PATH=/private/home/***REMOVED***/miniconda3/envs/gnnlogic/bin/:$PATH\n"
             model_run_file += "which python\n"
-            model_run_file +="echo 'Choosing GPU : $CUDA_VISIBLE_DEVICES'\n"
+            model_run_file += "echo 'Choosing GPU : $(CUDA_VISIBLE_DEVICES)'\n"
+            model_run_file += "timestamp() { date +\"%Y-%m-%d_%H-%M-%S\" }\n"
+            if args.local:
+                model_run_file += "echo '$(timestamp) Start running {}'".format(model_run_fl_name)
             run_path = os.path.join(path, 'codes','app')
             checkpoint_loc = '/checkpoint/***REMOVED***/clutrr/std_outputs/{}_{}.out'.format(model, base_data_name)
             model_run_file += pre + "python {}/main.py --config_id {}_{} > {}\n".format(run_path, model, base_data_name, checkpoint_loc)
-            model_run_fl_name = os.path.join(script_dir, '{}_{}_model_{}.sh'.format(base_data_name, '_'.join(models), mid))
+            model_run_file += 'echo "$(timestamp) Done running"'
             with open(model_run_fl_name,'w') as fp:
                 fp.write(model_run_file)
             local_gpu_jobs[gpu_choice].append(model_run_fl_name)
