@@ -10,7 +10,7 @@ general:
   mode: train # can be train or infer
 dataset:
   base_url: http://localhost:9300
-  data_path: data_55d19ce8
+  data_path: data_0e39f954
   save_path: dtp.pkl
   load_save_path: false
   load_dictionary: false
@@ -26,7 +26,7 @@ dataset:
 model:
   name: baseline1
   batch_size: 100
-  num_epochs: 15
+  num_epochs: 20
   num_entity_block: 20
   persist_per_epoch: -1
   early_stopping_patience: 1
