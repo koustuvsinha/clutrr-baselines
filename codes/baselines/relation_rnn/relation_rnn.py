@@ -1,4 +1,5 @@
-
+# The model is from `Relational recurrent neural networks (https://arxiv.org/abs/1806.01822)`
+# The implementation is based on `https://github.com/L0SG/relational-rnn-pytorch`
 
 import math
 import torch
@@ -9,8 +10,29 @@ from codes.net.base_net import Net
 
 
 class RelationRNNEncoder(Net):
+    """
+    Args:
+      mem_slots:    total number of memory slots (1st dim of memory matrix M).
+      head_size:    size of an attention head.
+      input_size:   size of input per step. i.e. the dimension of each input vector (embedding dim)
+      num_heads:    number of attention heads to use. Defaults to 1.
+      num_blocks:   number of times to compute attention per time step. Defaults 1.
+      forget_bias:  bias to use for the forget gate, assuming we are using
+                    some form of gating. Defaults to 1.
+      input_bias:   bias to use for the input gate, assuming we are using
+                    some form of gating. Defaults to 0.
+      gate_style:   whether to use per-element gating ('unit'),
+                    per-memory slot gating ('memory'), or no gating at all (None).
+                    Defaults to `unit`.
+      attention_mlp_layers: Number of layers to use in the post-attention
+                    MLP. Defaults to 2.
+      key_size:     size of vector to use for key & query vectors in the attention
+                    computation. Defaults to None, in which case we use `head_size`.
+      name:         Name of the module.
+    """
 
     def __init__(self, model_config, shared_embeddings=None):
+        super(RelationRNNEncoder, self).__init__(model_config)
         if not shared_embeddings:
             self.init_embeddings()
         else:
@@ -33,7 +55,7 @@ class RelationRNNEncoder(Net):
         self.gate_style =  model_config.RMC.gate_style
         assert self.gate_style in ['unit', 'memory', None]
 
-        self.key_size = self.head_size
+        self.key_size = model_config.RMC.key_size
 
         ########## parameters for multihead attention ##########
         # value_size is same as head_size
@@ -54,7 +76,7 @@ class RelationRNNEncoder(Net):
         self.attended_memory_layernorm2 = nn.LayerNorm([self.mem_slots_plus_input, self.mem_size])
 
         ########## parameters for initial embedded input projection ##########
-        self.input_size = model_config.embedding_dim
+        self.input_size = model_config.embedding.dim
         self.input_projector = nn.Linear(self.input_size, self.mem_size)
 
         ########## parameters for gating ##########
@@ -66,7 +88,7 @@ class RelationRNNEncoder(Net):
         self.input_bias = nn.Parameter(torch.tensor(self.input_bias, dtype=torch.float32))
 
         ########## number of outputs returned #####
-        self.return_all_outputs = model_config.return_all_outputs
+        self.return_all_outputs = model_config.RMC.return_all_outputs
 
     def initial_state(self, batch, batch_size):
 
@@ -82,7 +104,7 @@ class RelationRNNEncoder(Net):
         elif self.mem_size < self.mem_slots:
             init_state = init_state[:, :, :self.mem_size]
 
-        return init_state
+        return init_state.to(batch.inp.device)
 
 
     def repackage_hidden(self, h):
@@ -289,8 +311,8 @@ class RelationRNNEncoder(Net):
         inputs_lengths = batch.inp_lengths
         inputs = self.embedding(inputs)
 
-        batch_size = batch.inputs.shape[0]
-        time_steps = batch.inputs.shape[1]
+        batch_size = inputs.shape[0]
+        time_steps = inputs.shape[1]
         memory = self.initial_state(batch, batch_size)
         logits = []
         # shape[1] is seq_lenth T
@@ -298,9 +320,8 @@ class RelationRNNEncoder(Net):
             # input: B x embed_dim
             # memory: B x mem_slots x mem_size
             logit, memory = self.forward_step(inputs[:, idx_step], memory)
-            logits.append(logit)
-        logits = torch.cat(logits)
-
+            logits.append(logit.unsqueeze(1))
+        logits = torch.cat(logits, dim=1)
         if self.return_all_outputs:
             return logits, memory
         else:
@@ -309,7 +330,7 @@ class RelationRNNEncoder(Net):
 
 class RelationRNNDecoder(Net):
     def __init__(self, model_config):
-
+        super(RelationRNNDecoder, self).__init__(model_config)
         base_enc_dim = model_config.RMC.mem_slots * model_config.RMC.num_heads * model_config.RMC.head_size
         query_rep = base_enc_dim * model_config.decoder.query_ents
         input_dim = query_rep + base_enc_dim
@@ -343,13 +364,12 @@ class RelationRNNDecoder(Net):
 
 
     def forward(self, batch, step_batch):
-        hidden_rep = step_batch.hidden_rep
+        encoder_hidden = batch.encoder_hidden
         query_rep = step_batch.query_rep
         encoder_outputs = batch.encoder_outputs
-
-        mlp_inp = torch.cat([query_rep.squeeze(1), encoder_outputs], -1)
+        mlp_inp = torch.cat([query_rep.squeeze(1), encoder_outputs[:, -1, :]], -1)
         outp = self.decoder2vocab(mlp_inp)
-        return outp, None, hidden_rep
+        return outp, None, None
 
 
 # def attention(query, key, value, mask=None, dropout=None):

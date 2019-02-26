@@ -10,7 +10,7 @@ general:
   mode: train # can be train or infer
 dataset:
   base_url: http://localhost:9300
-  data_path: data_f876bad6
+  data_path: data_06a7f5ff
   save_path: dtp.pkl
   load_save_path: false
   load_dictionary: false
@@ -26,7 +26,7 @@ dataset:
 model:
   name: baseline1
   batch_size: 100
-  num_epochs: 20
+  num_epochs: 25
   num_entity_block: 20
   persist_per_epoch: -1
   early_stopping_patience: 1
@@ -61,7 +61,7 @@ model:
     l2_penalty: 0
     clip: 8
   encoder:
-    name: codes.baselines.lstm.basic.SimpleEncoder
+    name: codes.baselines.relation_rnn.relation_rnn.RelationRNNEncoder
     hidden_dim: 100
     nlayers: 2
     bidirectional: true
@@ -69,7 +69,7 @@ model:
     pooling: maxpool # can be attention or maxpool
     tmp_name: codes.models.gnn.encoder.GraphEncoder
   decoder:
-    name: codes.baselines.lstm.basic.SimpleDecoder
+    name: codes.baselines.relation_rnn.relation_rnn.RelationRNNDecoder
     hidden_dim: 200
     nlayers: 2
     bidirectional: false
@@ -132,7 +132,7 @@ model:
     input_bias: 0
     gate_style: unit   # memory, None
     key_size: None     # Defaults to None, in which case we use `head_size`
-    return_all_outputs: False
+    return_all_outputs: True
     attention_mlp_layers: 3
 
 log:
