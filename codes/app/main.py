@@ -38,7 +38,7 @@ if __name__ == '__main__':
         ex = OfflineExperiment(offline_directory=os.path.join(log_base, 'comet_runs'),
                         workspace=config.log.comet.workspace,
                         project_name=config.log.comet.project_name,
-                        disabled=config.log.comet.disabled,
+                        disabled=True,
                         auto_output_logging=None,
                         log_code=False)
         name = 'exp_{}'.format(config_id)

@@ -251,7 +251,7 @@ def _run_one_epoch(dataloader, experiment, mode, filename=''):
     for batch_idx, batch in enumerate(dataloader):
         experiment.iteration_index[mode] += 1
         batch.config = experiment.config
-        batch.process_adj_mat()
+        # batch.process_adj_mat()
         batch.to_device(experiment.device)
 
         if (should_train):

@@ -236,6 +236,6 @@ class Net(nn.Module):
                 entity_mask[0].fill_(0.0)
             self.embedding.weight.mul_(mask)
             self.embedding.weight.add_(random_weights.mul_(entity_mask))
-            self.random_weights = torch.tensor(random_weights)
+            self.random_weights = random_weights.clone().detach()
 
 

@@ -24,9 +24,9 @@ dataset:
   common_dict: true
   sentence_mode: false #sentence mode processes each input story sentence separately. For GNN, this helps to maintaining a node pair -> sentence mapping
 model:
-  name: baseline1
+  name: graph
   batch_size: 16
-  num_epochs: 30
+  num_epochs: 20
   num_entity_block: 20
   persist_per_epoch: -1
   early_stopping_patience: 1
@@ -52,7 +52,7 @@ model:
     #       2. learned, then learn the entity embeddings, but since we are randomizing entity
     #                              assignments in data this would not be an issue
     #       3. fixed, then set aside k random values for the entities but do not change them after one epoch
-    entity_embedding_policy: fixed
+    entity_embedding_policy: random
   optimiser:
     name: adam
     learning_rate: 0.001
@@ -62,29 +62,23 @@ model:
     l2_penalty: 0
     clip: 1
   encoder:
-    name: codes.baselines.relation.relation_nets.RelationNetworkEncoder
+    name: codes.baselines.gat.edge_gat.GatEncoder
     hidden_dim: 100
     nlayers: 2
     bidirectional: true
     dropout: 0
-    pooling: mean # can be attention or maxpool
+    pooling: maxpool # can be attention or maxpool
     tmp_name: codes.models.gnn.encoder.GraphEncoder
-    rn:
-      g_theta_dim: 64
-      f_theta:
-        dim_1: 256
-        dim_2: 64
-      reader: lstm
+    invalidate_embeddings: True
   decoder:
-    name: codes.baselines.relation.relation_nets.RelationNetworkDecoder
+    name: codes.baselines.gat.edge_gat.GatDecoder
     hidden_dim: 200
     nlayers: 2
     bidirectional: false
     dropout: 0
     query_ents: 2
     tmp_name: codes.models.gnn.decoder.GraphLSTMDecoder
-    invalidate_embeddings: False
-    pool_type: last # can be either attn, max, mean or last
+    use_attention: False  # use attention in classification decoder
   beam:
     beam_size: 3
     alpha: 0
@@ -96,12 +90,12 @@ model:
   graph:
     node_dim: 100
     message_dim: 100
-    edge_dim: 100
+    edge_dim: 20
     pos_rep: random # if random, then use a frozen embedding layer to denote the node position. if one-hot, then use just a one-hot embedding
     pos_dim: 5 # if above is random, then use this flag
     feature_dim: 10 # learns graph features
-    num_reads: 1
-    num_message_rounds: 2
+    num_reads: 3
+    num_message_rounds: 3
     message_function:
       num_layers: 2
       use_attention: True
@@ -116,11 +110,16 @@ model:
       use_layer_norm: True
     edge_embedding: word # if edge_embedding is lstm, then use an lstm to extract the relation, else average word embedding
     dropout: 0.0
+  rn:
+    g_theta_dim: 265
+    f_theta:
+      dim_1: 256
+      dim_2: 512
 log:
   file_path: ''
   logs_per_epoch: 50
   predictions: False # if true, save predicted examples in log folder
-  test_each_epoch: False # if true, log the test accuracies per epoch
+  test_each_epoch: True # if true, log the test accuracies per epoch
   comet:
     api_key: ***REMOVED*** # put the comet api key here
     project_name: clutrr # comet project name

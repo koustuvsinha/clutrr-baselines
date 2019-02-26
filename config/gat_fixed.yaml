@@ -25,7 +25,7 @@ dataset:
   sentence_mode: false #sentence mode processes each input story sentence separately. For GNN, this helps to maintaining a node pair -> sentence mapping
 model:
   name: graph
-  batch_size: 100
+  batch_size: 16
   num_epochs: 20
   num_entity_block: 20
   persist_per_epoch: -1
@@ -52,7 +52,7 @@ model:
     #       2. learned, then learn the entity embeddings, but since we are randomizing entity
     #                              assignments in data this would not be an issue
     #       3. fixed, then set aside k random values for the entities but do not change them after one epoch
-    entity_embedding_policy: random
+    entity_embedding_policy: fixed
   optimiser:
     name: adam
     learning_rate: 0.001

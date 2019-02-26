@@ -126,6 +126,9 @@ config/*
 !config/rn.yaml
 !config/rn_tpr.yaml
 !config/gat_clean.yaml
+!config/gat_fixed.yaml
+!config/gat_random.yaml
+!config/gat_learned.yaml
 !config/sample.config.yaml
 logs/*
 !logs/.gitkeep

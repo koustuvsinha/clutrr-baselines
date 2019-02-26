@@ -326,7 +326,7 @@ class DataUtility():
         if mode == 'train':
             for i, row in data.iterrows():
                 dR = self.dataRows[mode][row['id']]
-                dR.story_graph = self.prepare_ent_graph(dR.story_sents)
+                #  dR.story_graph = self.prepare_ent_graph(dR.story_sents)
                 ct += 1
             logging.info("Processed {} stories in mode {}".format(ct,
                                                                   mode))
@@ -334,7 +334,7 @@ class DataUtility():
         else:
             for i,row in data.iterrows():
                 dR = self.dataRows[mode][test_file][row['id']]
-                dR.story_graph = self.prepare_ent_graph(dR.story_sents)
+                # dR.story_graph = self.prepare_ent_graph(dR.story_sents)
                 ct +=1
             logging.info("Processed {} stories in mode {} and file: {}".format(
                 ct, mode, test_file))
@@ -477,7 +477,7 @@ class DataUtility():
         """
         for dataRow in dataRows:
             orig_inp = dataRow.story
-            inp_row_graph = dataRow.story_graph
+            # inp_row_graph = dataRow.story_graph
             inp_row_pos = []
 
             # for sentence tokenizations
@@ -552,7 +552,7 @@ class DataUtility():
                         'num_nodes': len(nodes)}
             query_edge = [dataRow.query_edge]
             num_nodes = [len(nodes)]
-            dataRow.pattrs = [inp_row, s_inp_row, inp_ents, query, text_query, query_mask, target, text_target, inp_row_graph,
+            dataRow.pattrs = [inp_row, s_inp_row, inp_ents, query, text_query, query_mask, target, text_target,
                sent_lengths, inp_ent_mask, geo_data, query_edge, num_nodes, sentence_pointer, orig_inp, inp_row_pos]
         return dataRows
 
@@ -582,10 +582,69 @@ class DataUtility():
 
         dataRows = self.prepare_for_dataloader(dataRows)
 
+        """
+
         return data.DataLoader(SequenceDataLoader(dataRows),
                                batch_size=self.batch_size,
                                num_workers=self.num_workers,
                                collate_fn=collate_FN)
+                               
+        """
+        batches = self.precompute_batches(dataRows)
+
+        return data.DataLoader(PreComputedDataLoader(batches),batch_size=1, collate_fn=pre_collate_fn)
+
+
+    def precompute_batches(self, dataRows:List[DataRow]):
+        print("precomputing batches...")
+        batch_size = self.config.model.batch_size
+        batches = []
+        for i in range(0, len(dataRows), batch_size):
+            data = [dataRows[i].pattrs for i in range(i, i+batch_size) if i < len(dataRows)]
+            data.sort(key=lambda x: len(x[0]), reverse=True)
+            inp_data, s_inp_data, inp_ents, query, text_query, query_mask, target, text_target, sent_lengths, inp_ent_mask, geo_data, query_edge, num_nodes, *_ = zip(
+                *data)
+            inp_data, inp_lengths = simple_merge(inp_data)
+            s_inp_data, sent_lengths = sent_merge(s_inp_data, sent_lengths)
+            # outp_data, outp_lengths = simple_merge(outp_data)
+            text_target, text_target_lengths = simple_merge(text_target)
+
+            query = torch.LongTensor(query)
+            query_mask = pad_ents(query_mask, inp_lengths)
+            target = torch.LongTensor(target)
+            # geo_data_col, geo_data_slices = collate_geometric(geo_data)
+            slices = [p for n in num_nodes for p in n]
+            max_node = max(slices)
+            # add extra node to all graphs in order to have padding
+            geo_data = [GeometricData(x=torch.arange(max_node).unsqueeze(1), edge_index=gd['edge_index'],
+                                      edge_attr=gd['edge_attr'], y=gd['y']) for gd in geo_data]
+            geo_batch = GeometricBatch.from_data_list(geo_data)
+            # update the slices - same number of nodes
+            slices = [max_node for s in slices]
+            query_edge = torch.LongTensor(query_edge)
+
+            # prepare batch
+            batch = Batch(
+                inp=inp_data,
+                s_inp=s_inp_data,
+                inp_lengths=inp_lengths,
+                sent_lengths=sent_lengths,
+                target=target,
+                text_target=text_target,
+                text_target_lengths=text_target_lengths,
+                inp_ents=inp_ents,
+                query=query,
+                query_mask=query_mask,
+                inp_ent_mask=torch.LongTensor(inp_ent_mask),
+                geo_batch=geo_batch,
+                query_edge=query_edge,
+                geo_slices=slices
+            )
+            batch.to_device('cuda')
+            batches.append(batch)
+        print("done precomputing batches {}".format(len(batches)))
+        return batches
+
 
     def map_text_to_id(self, text):
         if isinstance(text, list):
@@ -637,7 +696,7 @@ class DataUtility():
         :param filename: location
         :return: None
         """
-        pkl.dump(self.__dict__, open(filename, 'wb'))
+        #pkl.dump(self.__dict__, open(filename, 'wb'))
         logging.info("Saved data in {}".format(filename))
 
     def load(self, filename='data_files.pkl'):
@@ -646,8 +705,8 @@ class DataUtility():
         :param filename: location
         :return:
         """
-        logging.info("Loading data from {}".format(filename))
-        self.__dict__.update(pkl.load(open(filename,'rb')))
+        #logging.info("Loading data from {}".format(filename))
+        #self.__dict__.update(pkl.load(open(filename,'rb')))
         logging.info("Loaded")
 
 
@@ -673,6 +732,34 @@ class SequenceDataLoader(data.Dataset):
 
     def __len__(self):
         return len(self.dataRows)
+
+
+class PreComputedDataLoader(data.Dataset):
+    """
+    Separate dataloader instance
+    """
+
+    def __init__(self, batches):
+        """
+        :param dataRows: training / validation / test data rows
+        :param data: pointer to DataUtility class
+        """
+        self.batches = batches
+
+    def __getitem__(self, index):
+        """
+        Return single training row for dataloader
+        :param item:
+        :return:
+        """
+        return self.batches[index].clone()
+
+    def __len__(self):
+        return len(self.batches)
+
+def pre_collate_fn(data):
+    assert len(data) == 1
+    return data[0]
 
 
 ## Helper functions
@@ -704,7 +791,7 @@ def collate_fn(data):
     """
     ## sort dataset by inp sentences
     data.sort(key=lambda x: len(x[0]), reverse=True)
-    inp_data, s_inp_data, inp_ents, query, text_query, query_mask, target, text_target, inp_graphs, sent_lengths, inp_ent_mask, geo_data, query_edge, num_nodes, *_ = zip(*data)
+    inp_data, s_inp_data, inp_ents, query, text_query, query_mask, target, text_target, sent_lengths, inp_ent_mask, geo_data, query_edge, num_nodes, *_ = zip(*data)
     inp_data, inp_lengths = simple_merge(inp_data)
     s_inp_data, sent_lengths = sent_merge(s_inp_data, sent_lengths)
     # outp_data, outp_lengths = simple_merge(outp_data)
@@ -735,7 +822,6 @@ def collate_fn(data):
         inp_ents=inp_ents,
         query=query,
         query_mask=query_mask,
-        inp_graphs=torch.LongTensor(inp_graphs),
         inp_ent_mask = torch.LongTensor(inp_ent_mask),
         geo_batch=geo_batch,
         query_edge=query_edge,

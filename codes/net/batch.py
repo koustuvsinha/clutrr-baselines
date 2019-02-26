@@ -88,8 +88,8 @@ class Batch:
         self.text_target_lengths = self.text_target.to(device)
         self.query = self.query.to(device)
         self.query_mask = self.query_mask.to(device)
-        self.inp_graphs = self.inp_graphs.to(device)
-        self.adj_mat = self.adj_mat.to(device)
+        # self.inp_graphs = self.inp_graphs.to(device)
+        # self.adj_mat = self.adj_mat.to(device)
         self.inp_ent_mask = self.inp_ent_mask.to(device)
         if self.inp_row_pos is not None:
             self.inp_row_pos = self.inp_row_pos.to(device)
@@ -100,14 +100,41 @@ class Batch:
         if self.query_edge is not None:
             self.query_edge = self.query_edge.to(device)
 
-    def process_adj_mat(self):
+    def _process_adj_mat(self):
         """
+        Deprecated.
         Get adjacency matrix of size B x n_e x n_e x n_s x n_dim
         """
         n_e = self.inp_graphs.size(1)
         n_s = self.config.model.graph.num_reads
         n_dim = self.config.model.graph.edge_dim
         self.adj_mat = torch.zeros((self.batch_size, n_e, n_e, n_s, n_dim))
+
+    def clone(self):
+        return Batch(inp=self.inp.clone().detach(),
+                     inp_lengths=self.inp_lengths,
+                     s_inp=self.s_inp.clone().detach(),
+                     sent_lengths=self.sent_lengths,  # B x s x 1
+                     target=self.target.clone().detach(),  # target of the relation, (B x 1)
+                     text_target=self.text_target.clone().detach(),  # target in text, (B x t)
+                     text_target_lengths=self.text_target.clone().detach(),  # target lengths, (B x 1)
+                     query=self.query.clone().detach(),  # query relation pair, (B x 2)
+                     query_mask=self.query_mask.clone().detach(),  # query mask over input, (B x s x 2)
+                     query_text=self.query_text,  # query_text input, (B x q)
+                     query_text_lengths=self.query_text_lengths,  # query_text lengths, (B x 1)
+                     inp_ents=self.inp_ents,  # entities per story, (B x e)
+                     inp_ent_mask=self.inp_ent_mask.clone().detach(),
+                     # mask over story which specifies entities, (B x s) / (B x s x w) in sentence mode
+                     inp_graphs=None,  # story graphs, (B x n x n), where n = max entity in dataset
+                     sentence_pointer=None,
+                     # each pair of nodes point to a specific sentence by using a one-hot vector over the sentences (in batch mode), (B x n x n x w)
+                     config=self.config,
+                     orig_inp=None,  # Unmodified input
+                     inp_row_pos=None,  # position over input text (B x s x w)
+                     geo_batch=self.geo_batch,  # Pytorch Geometric Batch object (collection of Pytorch Data objects),
+                     geo_slices=self.geo_slices,  # Pytorch Geometric slices, to restore the original splits
+                     query_edge=self.query_edge.clone().detach(),
+                     )
 
 
 

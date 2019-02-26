@@ -59,12 +59,13 @@ if __name__ == '__main__':
             run_file += "#SBATCH --job-name=clutrr_{}_{}\n".format(base_data_name, '_'.join(models))
             run_file += "#SBATCH --output=/checkpoint/***REMOVED***/jobs/{}_{}_%j.out\n".format(base_data_name, '_'.join(models))
             run_file += "#SBATCH --error=/checkpoint/***REMOVED***/jobs/{}_{}_%j.err\n".format(base_data_name, '_'.join(models))
+            #run_file += "#SBATCH --comment=\"ACL Deadline 4/03/19\""
             run_file += "#SBATCH --partition=uninterrupted\n"
             run_file += "#SBATCH --nodes=1\n"
             run_file += "#SBATCH --ntasks-per-node={}\n".format(len(models))
             run_file += "#SBATCH --gres=gpu:{}\n".format(len(models))
             run_file += "#SBATCH --cpus-per-task 4\n"
-            run_file += "#SBATCH --time 06:00:00\n"
+            run_file += "#SBATCH --time 10:00:00\n"
             run_file += "module purge\n"
             run_file += "module load openmpi/3.0.0/gcc.5.4.0\n"
             run_file += "module load NCCL/2.4.2-1-cuda.10.0\n"
