@@ -18,6 +18,7 @@ import glob
 from io import BytesIO
 from zipfile import ZipFile
 from urllib.request import urlopen
+import json
 import logging
 for handler in logging.root.handlers[:]:
     logging.root.removeHandler(handler)
@@ -68,12 +69,15 @@ def run_experiment(config, exp, resume=False):
     get_data(config)
     base_path = os.path.join(parent_dir, 'data', config.dataset.data_path)
     exp.log_dataset_info(config.dataset.data_path)
+    data_config = json.load(open(os.path.join(base_path, 'config.json')))
     # get the list of files in base path
     train_files = glob.glob(os.path.join(base_path, "*_train.csv"))
     assert len(train_files) == 1  # make sure we have only one train file
     config.dataset.train_file = train_files[0]
     test_files = glob.glob(os.path.join(base_path, "*_test.csv"))
     assert len(test_files) > 0  # make sure there exist at least one test file
+    print(test_files)
+    assert len(test_files) == len(data_config['test_tasks'])
     config.dataset.test_files = test_files
     # generate dictionary
     generate_dictionary(config)
@@ -110,9 +114,9 @@ def run_experiment(config, exp, resume=False):
     experiment.dataloaders.test = {}
     for test_file in sorted(config.dataset.test_files):
         test_rel = int(test_file.split('_test.csv')[0].split('.')[-1])
-        experiment.dataloaders.test[test_rel] = { 'dl': data_util.get_dataloader(mode='test',
-                                                    test_file=test_file), 'file': test_file}
-
+        experiment.dataloaders.test[test_file] = { 'dl': data_util.get_dataloader(mode='test',
+            test_file=test_file), 'test_rel': test_rel}
+        print("created dataloader for file {}".format(test_file))
     experiment.model.encoder, experiment.model.decoder = choose_model(config)
     experiment.model.encoder = experiment.model.encoder.to(device)
     experiment.model.decoder = experiment.model.decoder.to(device)
@@ -195,16 +199,19 @@ def _run_one_epoch_train_val(experiment):
 
 def _run_one_epoch_test(experiment):
     test_accs = []
+    print(experiment.dataloaders.test)
     if len(experiment.dataloaders.test) > 0:
         with experiment.comet_ml.test():
-            for test_rel, dlo in experiment.dataloaders.test.items():
+            for test_file, dlo in experiment.dataloaders.test.items():
                 dataloader = dlo['dl']
-                test_file = dlo['file']
-                test_fl_name = dlo['file'].split('/')[-1]
+                test_rel = dlo['test_rel']
+                test_fl_name = test_file.split('/')[-1]
                 _, acc = _run_one_epoch(dataloader, experiment, mode="test",
                                         filename=test_file)
-                experiment.comet_ml.log_metric("test_acc", acc, step=test_rel)
                 epoch = experiment.epoch_index
+                # last epoch
+                if epoch == (experiment.config.model.num_epochs + 1):
+                    experiment.comet_ml.log_metric("test_acc", acc, step=test_rel)
                 if experiment.config.log.test_each_epoch:
                     experiment.comet_ml.log_metric("test_acc_{}".format(test_fl_name), acc, step=epoch)
                 test_accs.append((test_fl_name, acc))
