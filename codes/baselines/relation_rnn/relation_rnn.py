@@ -46,16 +46,16 @@ class RelationRNNEncoder(Net):
         self.mem_size = self.head_size * self.num_heads
 
         # a new fixed params needed for pytorch port of RMC
-        # +1 is the concatenated input per time step : we do self-attention with the concatenated memory & input
+        # +1 is the concatenated input per time step: do self-attention with the concatenated memory & input
         # so if the mem_slots = 1, this value is 2
         self.mem_slots_plus_input = self.mem_slots + 1
 
         self.forget_bias = model_config.RMC.forget_bias
-        self.input_bias =  model_config.RMC.input_bias
-        self.gate_style =  model_config.RMC.gate_style
+        self.input_bias = model_config.RMC.input_bias
+        self.gate_style = model_config.RMC.gate_style
         assert self.gate_style in ['unit', 'memory', None]
 
-        self.key_size = model_config.RMC.key_size
+        self.key_size = model_config.RMC.key_size if model_config.RMC.key_size else self.head_size
 
         ########## parameters for multihead attention ##########
         # value_size is same as head_size
@@ -90,8 +90,13 @@ class RelationRNNEncoder(Net):
         ########## number of outputs returned #####
         self.return_all_outputs = model_config.RMC.return_all_outputs
 
-    def initial_state(self, batch, batch_size):
 
+    def initial_state(self, batch, batch_size):
+        """
+        :param batch:
+        :param batch_size:
+        :return: (batch_size, self.mem_slots, self.mem_size)
+        """
         init_state = torch.stack([torch.eye(self.mem_slots) for _ in range(batch_size)])
 
         # pad the matrix with zeros
@@ -128,6 +133,7 @@ class RelationRNNEncoder(Net):
         """
 
         # First, a simple linear projection is used to construct queries
+        # B x mem_slots x mem_size -> B x mem_slots x total qkv size (F)
         qkv = self.qkv_projector(memory)
         # apply layernorm for every dim except the batch dim
         qkv = self.qkv_layernorm(qkv)
@@ -254,7 +260,7 @@ class RelationRNNEncoder(Net):
         """
         Forward step of the relational memory core.
         Args:
-          inputs: Tensor input.
+          inputs: Tensor input. [B x 1 x embed_dim]
           memory: Memory output from the previous time step.
           treat_input_as_matrix: Optional, whether to treat `input` as a sequence
             of matrices. Default to False, in which case the input is flattened
@@ -298,6 +304,7 @@ class RelationRNNEncoder(Net):
 
 
     def forward(self, batch):
+        import time
         # Starting each batch, we detach the hidden state from how it was previously produced.
         # If we didn't, the model would try backpropagating all the way to start of the dataset.
         # memory = self.repackage_hidden(memory)
@@ -320,9 +327,10 @@ class RelationRNNEncoder(Net):
             # input: B x embed_dim
             # memory: B x mem_slots x mem_size
             logit, memory = self.forward_step(inputs[:, idx_step], memory)
-            logits.append(logit.unsqueeze(1))
-        logits = torch.cat(logits, dim=1)
+            if self.return_all_outputs:
+                logits.append(logit.unsqueeze(1))
         if self.return_all_outputs:
+            logits = torch.cat(logits, dim=1)
             return logits, memory
         else:
             return logit, memory
@@ -367,7 +375,8 @@ class RelationRNNDecoder(Net):
         encoder_hidden = batch.encoder_hidden
         query_rep = step_batch.query_rep
         encoder_outputs = batch.encoder_outputs
-        mlp_inp = torch.cat([query_rep.squeeze(1), encoder_outputs[:, -1, :]], -1)
+        # print(encoder_outputs.shape, encoder_hidden.shape, query_rep.shape)
+        mlp_inp = torch.cat([query_rep.squeeze(1), encoder_hidden.squeeze(1)], -1)
         outp = self.decoder2vocab(mlp_inp)
         return outp, None, None
 

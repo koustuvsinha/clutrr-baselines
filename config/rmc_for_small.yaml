@@ -10,7 +10,7 @@ general:
   mode: train # can be train or infer
 dataset:
   base_url: http://localhost:9300
-  data_path: data_06a7f5ff
+  data_path: data_55d19ce8
   save_path: dtp.pkl
   load_save_path: false
   load_dictionary: false
@@ -26,7 +26,7 @@ dataset:
 model:
   name: baseline1
   batch_size: 100
-  num_epochs: 20
+  num_epochs: 15
   num_entity_block: 20
   persist_per_epoch: -1
   early_stopping_patience: 1
@@ -41,7 +41,7 @@ model:
     patience: 3
     metric_to_track: val_loss
   embedding:
-    dim: 100
+    dim: 128
     should_use_pretrained_embedding: false
     should_finetune_embedding: true
     pretrained_embedding_path: w2v/w2v_sst.txt
@@ -125,15 +125,15 @@ model:
       write: 0.2
   RMC:
     mem_slots: 1
-    head_size: 45
+    head_size: 64
     num_heads: 4
     num_blocks: 1
     forget_bias: 1
     input_bias: 0
     gate_style: unit   # memory, None
-    key_size: None     # Defaults to None, in which case we use `head_size`
+    key_size: 64     # Defaults to None, in which case we use `head_size`
     return_all_outputs: True
-    attention_mlp_layers: 3
+    attention_mlp_layers: 2
 
 log:
   file_path: ''

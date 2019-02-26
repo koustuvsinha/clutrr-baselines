@@ -120,6 +120,8 @@ config/*
 !config/bilstm_concat.yaml
 !config/bilstm_atten.yaml
 !config/rmc.yaml
+!config/rmc_for_small.yaml
+!config/rmc_tune.yaml
 !config/mac.yaml
 !config/rn.yaml
 !config/rn_tpr.yaml
