@@ -133,7 +133,7 @@ model:
     gate_style: unit   # memory, None
     key_size: 64     # Defaults to None, in which case we use `head_size`
     return_all_outputs: True
-    attention_mlp_layers: 3
+    attention_mlp_layers: 2
     dropout: 0.25
 
 log:
