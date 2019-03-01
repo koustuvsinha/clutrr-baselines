@@ -124,7 +124,7 @@ model:
       read: 0.2
       write: 0.2
   RMC:
-    mem_slots: 1
+    mem_slots: 4
     head_size: 128
     num_heads: 4
     num_blocks: 1
