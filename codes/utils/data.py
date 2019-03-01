@@ -122,6 +122,7 @@ class DataUtility():
         self.preprocessed = set() # set of puzzle ids which has been preprocessed
         self.max_sent_length = 0
         self.max_word_length = 0
+        self.unique_nodes = set() # nodes for the raw graph
 
     def process_data(self, base_path, train_file, load_dictionary=True, preprocess=True):
         """
@@ -305,6 +306,8 @@ class DataUtility():
                 dataRow.story_edges = list(make_tuple(row['story_edges']))
                 dataRow.edge_types = make_tuple(row['edge_types'])
                 dataRow.query_edge = make_tuple(row['query_edge'])
+                unique_nodes = [n for edge in dataRow.story_edges for n in edge]
+                self.unique_nodes.update(unique_nodes)
                 for et in dataRow.edge_types:
                     if et not in self.unique_edge_dict:
                         self.unique_edge_dict[et] = len(self.unique_edge_dict)
@@ -416,8 +419,8 @@ class DataUtility():
         # finally add the words
         for word in words:
             if word not in self.word2id:
-                self._insert_wordid(word, count)
-                count += 1
+                self._insert_wordid(word, len(self.word2id))
+                #count += 1
 
         logging.info("Modified dictionary. Words : {}, Entities : {}".format(
             len(self.word2id), len(self.entity_ids)))
@@ -441,6 +444,7 @@ class DataUtility():
         Now we use separate testing file
         :return:
         """
+        logging.info("splitting data ...")
         indices = list(self.dataRows['train'].keys())
         mask_i = np.random.choice(indices, int(len(indices) * self.train_test_split), replace=False)
         self.val_indices = [self.dataRows['train'][i].id for i in indices if i not in set(mask_i)]
@@ -999,16 +1003,20 @@ def generate_dictionary(config):
     logging.info("Creating dictionary with all test files")
     ds = DataUtility(config)
     datas = []
+    logging.info("For training file")
     train_data, max_ents = ds.process_data(os.path.join(parent_dir, 'data', config.dataset.data_path),
                     config.dataset.train_file, load_dictionary=False, preprocess=False)
     datas.append(train_data)
+    logging.info("For testing files")
     for test_file in config.dataset.test_files:
+        logging.info("For file {}".format(test_file))
         test_data, max_e = ds.process_data(os.path.join(parent_dir, 'data', config.dataset.data_path),
                         test_file, load_dictionary=False, preprocess=False)
         datas.append(test_data)
         if max_e > max_ents:
             max_ents = max_e
     ds.max_ents = max_ents
+    logging.info("Processing words...")
     for data in datas:
         ds.preprocess(data)
 
