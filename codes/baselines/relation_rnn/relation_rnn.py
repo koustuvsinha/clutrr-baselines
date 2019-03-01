@@ -55,8 +55,7 @@ class RelationRNNEncoder(Net):
         self.gate_style = model_config.RMC.gate_style
         assert self.gate_style in ['unit', 'memory', None]
 
-        self.key_size = model_config.RMC.key_size if model_config.RMC.key_size else self.head_size
-
+        self.key_size = model_config.RMC.key_size  # if model_config.RMC.key_size else self.head_size
         ########## parameters for multihead attention ##########
         # value_size is same as head_size
         self.value_size = self.head_size
@@ -89,6 +88,9 @@ class RelationRNNEncoder(Net):
 
         ########## number of outputs returned #####
         self.return_all_outputs = model_config.RMC.return_all_outputs
+
+        ######### dropout #####
+        self.dropout = nn.Dropout(model_config.RMC.dropout)
 
 
     def initial_state(self, batch, batch_size):
@@ -317,6 +319,7 @@ class RelationRNNEncoder(Net):
         inputs = batch.inp
         inputs_lengths = batch.inp_lengths
         inputs = self.embedding(inputs)
+        inputs = self.dropout(inputs)
 
         batch_size = inputs.shape[0]
         time_steps = inputs.shape[1]
@@ -343,7 +346,12 @@ class RelationRNNDecoder(Net):
         query_rep = base_enc_dim * model_config.decoder.query_ents
         input_dim = query_rep + base_enc_dim
         output_dim = model_config.target_size
-        self.decoder2vocab = self.get_mlp(input_dim, output_dim)
+        self.decoder2vocab = nn.Sequential(
+            nn.Linear(input_dim, input_dim//2),
+            nn.ReLU(),
+            nn.Linear(input_dim//2, output_dim)
+        )
+        # self.decoder2vocab = self.get_mlp(input_dim, output_dim)
 
     def calculate_query(self, batch):
         """

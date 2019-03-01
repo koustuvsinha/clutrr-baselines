@@ -10,7 +10,7 @@ general:
   mode: train # can be train or infer
 dataset:
   base_url: http://localhost:9300
-  data_path: data_0e39f954
+  data_path: data_51095ab5
   save_path: dtp.pkl
   load_save_path: false
   load_dictionary: false
@@ -25,7 +25,7 @@ dataset:
   sentence_mode: false #sentence mode processes each input story sentence separately. For GNN, this helps to maintaining a node pair -> sentence mapping
 model:
   name: baseline1
-  batch_size: 100
+  batch_size: 64
   num_epochs: 20
   num_entity_block: 20
   persist_per_epoch: -1
@@ -41,7 +41,7 @@ model:
     patience: 3
     metric_to_track: val_loss
   embedding:
-    dim: 128
+    dim: 192
     should_use_pretrained_embedding: false
     should_finetune_embedding: true
     pretrained_embedding_path: w2v/w2v_sst.txt
@@ -125,7 +125,7 @@ model:
       write: 0.2
   RMC:
     mem_slots: 1
-    head_size: 64
+    head_size: 192
     num_heads: 4
     num_blocks: 1
     forget_bias: 1
@@ -133,7 +133,8 @@ model:
     gate_style: unit   # memory, None
     key_size: 64     # Defaults to None, in which case we use `head_size`
     return_all_outputs: True
-    attention_mlp_layers: 2
+    attention_mlp_layers: 3
+    dropout: 0.25
 
 log:
   file_path: ''
