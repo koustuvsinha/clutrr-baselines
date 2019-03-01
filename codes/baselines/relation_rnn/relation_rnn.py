@@ -334,9 +334,9 @@ class RelationRNNEncoder(Net):
                 logits.append(logit.unsqueeze(1))
         if self.return_all_outputs:
             logits = torch.cat(logits, dim=1)
-            return logits, memory
+            return logits, memory.view(memory.shape[0], -1)
         else:
-            return logit, memory
+            return logit, memory.view(memory.shape[0], -1)
 
 
 class RelationRNNDecoder(Net):
@@ -384,7 +384,7 @@ class RelationRNNDecoder(Net):
         query_rep = step_batch.query_rep
         encoder_outputs = batch.encoder_outputs
         # print(encoder_outputs.shape, encoder_hidden.shape, query_rep.shape)
-        mlp_inp = torch.cat([query_rep.squeeze(1), encoder_hidden.squeeze(1)], -1)
+        mlp_inp = torch.cat([query_rep.squeeze(1), encoder_hidden], -1)
         outp = self.decoder2vocab(mlp_inp)
         return outp, None, None
 
