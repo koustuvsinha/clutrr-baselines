@@ -131,9 +131,9 @@ log:
   predictions: False # if true, save predicted examples in log folder
   test_each_epoch: True # if true, log the test accuracies per epoch
   comet:
-    api_key: ***REMOVED*** # put the comet api key here
+    api_key: # put the comet api key here
     project_name: clutrr # comet project name
-    workspace: ***REMOVED*** # comet workspace
+    workspace: koustuvs # comet workspace
     disabled: false # disable when debugging
   base_path: ''
 plot:

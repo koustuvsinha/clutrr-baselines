@@ -50,8 +50,8 @@ def run_per_folder(args, run_num=0):
         # change
         if not args.local:
             run_file += "#SBATCH --job-name=clutrr_{}\n".format(exp_str)
-            run_file += "#SBATCH --output=/checkpoint/***REMOVED***/jobs/{}_%j.out\n".format(exp_str)
-            run_file += "#SBATCH --error=/checkpoint/***REMOVED***/jobs/{}_%j.err\n".format(exp_str)
+            run_file += "#SBATCH --output=/checkpoint/koustuvs/jobs/{}_%j.out\n".format(exp_str)
+            run_file += "#SBATCH --error=/checkpoint/koustuvs/jobs/{}_%j.err\n".format(exp_str)
             run_file += "#SBATCH --comment=\"ACL Deadline 4/03/19\"\n"
             run_file += "#SBATCH --partition=priority\n"
             run_file += "#SBATCH --nodes=1\n"
@@ -90,14 +90,14 @@ def run_per_folder(args, run_num=0):
                 pre = ''
             model_run_file = "#!/bin/sh\n"
             output_file = '{}/{}_{}.out'.format(args.stdout, base_path, model)
-            # model_run_file += ". /private/home/***REMOVED***/miniconda3/bin/activate gnnlogic\n"
+            # model_run_file += ". /private/home/koustuvs/miniconda3/bin/activate gnnlogic\n"
             model_run_fl_name = os.path.join(script_dir,
                                              '{}_model_{}.sh'.format(exp_str, mid))
             model_run_file += "export COMET_API='{}'\n".format(args.comet_api)
             model_run_file += "export COMET_WORKSPACE='{}'\n".format(args.comet_workspace)
             model_run_file += "export COMET_PROJECT='{}'\n".format(args.comet_project)
             model_run_file += "export PYTHONPATH=$PYTHONPATH:{}\n".format(path)
-            model_run_file += "export PATH=/private/home/***REMOVED***/miniconda3/envs/gnnlogic/bin/:$PATH\n"
+            model_run_file += "export PATH=/private/home/koustuvs/miniconda3/envs/gnnlogic/bin/:$PATH\n"
             model_run_file += "which python\n"
             model_run_file += "echo 'Choosing GPU'\n"
             model_run_file += "timestamp() {\n"
@@ -107,13 +107,13 @@ def run_per_folder(args, run_num=0):
             if args.local:
                 model_run_file += "echo \"$(timestamp) Start running {}\"\n".format(model_run_fl_name)
             run_path = os.path.join(path, 'codes', 'app')
-            checkpoint_loc = '/checkpoint/***REMOVED***/clutrr/std_outputs/{}.out'.format(exp_str)
+            checkpoint_loc = '/checkpoint/koustuvs/clutrr/std_outputs/{}.out'.format(exp_str)
             ent_policies = args.entity_policy.split(',')
             for ep in ent_policies:
                 config_file = yaml.load(open(os.path.join(base_path, 'config', '{}.yaml'.format(model))))
                 config_file['dataset']['data_path'] = base_data_name
                 config_file['dataset']['data_desc'] = data_desc
-                config_file['general']['base_path'] = '/checkpoint/***REMOVED***/clutrr/'
+                config_file['general']['base_path'] = '/checkpoint/koustuvs/clutrr/'
                 config_file['model']['embedding']['entity_embedding_policy'] = ep
                 config_file['model']['num_epochs'] = args.num_epochs
                 config_file['model']['embedding']['dim'] = args.emb_dim
@@ -154,7 +154,7 @@ def run_per_folder(args, run_num=0):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--comet_api", type=str, default='')
-    parser.add_argument("--comet_workspace", type=str, default='***REMOVED***')
+    parser.add_argument("--comet_workspace", type=str, default='koustuvs')
     parser.add_argument("--comet_project", type=str, default='compositionality-nli')
     parser.add_argument('--loc', type=str, default='data/')
     parser.add_argument('--models', type=str, default='bilstm_atten,bilstm_max,bilstm_mean,bilstm_concat,gat_clean,mac,rn,rn_tpr')

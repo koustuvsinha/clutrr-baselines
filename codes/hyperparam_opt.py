@@ -105,7 +105,7 @@ def create_configs(config_id):
         current_str_id = config_id + "_hp_" + str(current_id)
         new_config["general"]["id"] = current_str_id
         new_config["model"]["checkpoint"] = False
-        # new_config["log"]["base_path"] = "/checkpoint/***REMOVED***/clutrr/"
+        # new_config["log"]["base_path"] = "/checkpoint/koustuvs/clutrr/"
         for hyperparam in hyperparams:
             setInDict(new_config, hyperparam.key_list, hyperparam.value)
         new_config_file = target_dir + "/{}.yaml".format(current_str_id)
@@ -124,8 +124,8 @@ def create_run_file(args):
     run_file = "#!/bin/sh\n"
     if not args.local:
         run_file += "#SBATCH --job-name=hyperparam_{}\n".format(args.model)
-        run_file += "#SBATCH --output=/checkpoint/***REMOVED***/jobs/{}.out\n".format(args.model)
-        run_file += "#SBATCH --error=/checkpoint/***REMOVED***/jobs/{}.err\n".format(args.model)
+        run_file += "#SBATCH --output=/checkpoint/koustuvs/jobs/{}.out\n".format(args.model)
+        run_file += "#SBATCH --error=/checkpoint/koustuvs/jobs/{}.err\n".format(args.model)
         run_file += "#SBATCH --partition=uninterrupted\n"
         run_file += "#SBATCH --nodes=1\n"
         run_file += "#SBATCH --ntasks-per-node=1\n"
@@ -161,7 +161,7 @@ def create_run_file(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--comet_api", type=str, default='')
-    parser.add_argument("--comet_workspace", type=str, default='***REMOVED***')
+    parser.add_argument("--comet_workspace", type=str, default='koustuvs')
     parser.add_argument("--comet_project", type=str, default='compositionality-nli')
     parser.add_argument('--model', type=str, default='bilstm', help='either one in bilstm,gat_clean,lstm_atten,mac,rn,rn_tpr')
     parser.add_argument('--local', action='store_true', help="If true, run on machines not on slurm")
