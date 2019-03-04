@@ -97,11 +97,13 @@ def run_experiment(config, exp, resume=False):
     config.model.target_size = target_size
     config.model.max_nodes = data_util.num_entity_block
     config.model.max_sent_length = data_util.max_sent_length
+    config.model.classes = data_util.target_id2word
 
     config.log.logger.info("Loading testing data")
     data_util.process_test_data(base_path, config.dataset.test_files)
     config.model.max_word_length = data_util.max_word_length
     config.model.edge_types = len(data_util.unique_edge_dict)
+    config.model.unique_nodes = len(data_util.unique_nodes)
 
     ## set the edge dimension w.r.t the edge encoder
     if config.model.encoder.bidirectional and config.model.graph.edge_embedding == 'lstm':
@@ -243,6 +245,7 @@ def _run_one_epoch(dataloader, experiment, mode, filename=''):
     true_outp = []
     pred_outp = []
     epoch_rel = []
+    confidences = []
 
     log_batch_losses = []
     log_batch_rel = []
@@ -258,14 +261,15 @@ def _run_one_epoch(dataloader, experiment, mode, filename=''):
             for optimizer in optimizers:
                 optimizer.zero_grad()
 
-        outputs, loss = trainer.batchLoss(batch)
+        outputs, loss, conf = trainer.batchLoss(batch)
 
         batch_loss = loss.item()
         if (should_train):
             loss.backward()
             clip = experiment.config.model.optimiser.clip
-            torch.nn.utils.clip_grad_norm_(experiment.model.encoder.parameters(), clip)
-            torch.nn.utils.clip_grad_norm_(experiment.model.decoder.parameters(), clip)
+            if clip > 0:
+                torch.nn.utils.clip_grad_norm_(experiment.model.encoder.parameters(), clip)
+                torch.nn.utils.clip_grad_norm_(experiment.model.decoder.parameters(), clip)
             for optimizer in optimizers:
                 optimizer.step()
         aggregated_batch_loss += (batch_loss * batch.batch_size)
@@ -279,6 +283,7 @@ def _run_one_epoch(dataloader, experiment, mode, filename=''):
         true_inp.extend(batch.true_inp)
         true_outp.extend(batch.true_outp)
         pred_outp.extend(batch.pred_outp)
+        confidences.extend(conf.detach().cpu().numpy())
 
         accuracy = experiment.quality_metrics.relation_overlap(batch.pred_outp, batch.true_outp)
         log_batch_rel.append(accuracy)
@@ -307,7 +312,7 @@ def _run_one_epoch(dataloader, experiment, mode, filename=''):
         pred_outp = [' '.join(sent) for sent in pred_outp]
         assert len(true_inp) == len(true_outp) == len(pred_outp)
         write_sequences(true_inp, true_outp, pred_outp, mode, experiment.epoch_index,
-                        exp_name=experiment.config.general.exp_name)
+                        exp_name=experiment.config.general.id, test_fl=filename, conf=confidences, classes=experiment.config.model.classes)
     if experiment.config.general.mode == 'train' and experiment.config.model.checkpoint:
         experiment.save_checkpoint(is_best=False)
 

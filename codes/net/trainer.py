@@ -1,6 +1,7 @@
 # Trainer class to get the loss and predictions
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 import numpy as np
 from addict import Dict
@@ -109,9 +110,11 @@ class Trainer:
         topv, topi = logits.data.topk(1)
         next_words = topi.squeeze(1)
         decoder_outp = next_words
+        # confidence of classes
+        conf = torch.exp(F.log_softmax(logits,dim=1))
 
 
-        return decoder_outp, loss
+        return decoder_outp, loss, conf
 
     def train(self):
         self.encoder_model.train()

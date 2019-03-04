@@ -34,6 +34,10 @@ class Net(nn.Module):
         self.max_entity_id = 0
         self.random_weights = None
 
+        # flag for graph mode
+        self.graph_mode = False
+        self.one_hot = False
+
     def loss(self, outputs, labels):
         '''
         Method to perform the loss computation
@@ -219,23 +223,36 @@ class Net(nn.Module):
         :param fixed: if True, then re-use the old random weights
         :return:
         """
+        if self.one_hot:
+            if not self.graph_mode:
+                raise NotImplementedError("one hot mode only for graph")
         with torch.no_grad():
             vocab_size = self.embedding.weight.size(0)
-            ids = torch.arange(0, vocab_size)
-            assert self.max_entity_id > 0
-            mask = self.get_entity_mask(ids, self.max_entity_id)
-            mask = mask.unsqueeze(1)
-            if fixed:
+            if self.one_hot:
+                random_weights = torch.eye(vocab_size).to(self.embedding.weight.device)
+            elif fixed:
                 random_weights = self.random_weights
             else:
                 random_weights = torch.nn.init.xavier_uniform_(torch.zeros(
                     self.embedding.weight.size()).to(self.embedding.weight.device))
-            entity_mask = (1 - mask)
-            # check for padding
-            if padding:
-                entity_mask[0].fill_(0.0)
-            self.embedding.weight.mul_(mask)
-            self.embedding.weight.add_(random_weights.mul_(entity_mask))
+            if not self.graph_mode:
+                ids = torch.arange(0, vocab_size)
+                assert self.max_entity_id > 0
+                mask = self.get_entity_mask(ids, self.max_entity_id)
+                mask = mask.unsqueeze(1)
+                entity_mask = (1 - mask)
+                # check for padding
+                if padding:
+                    entity_mask[0].fill_(0.0)
+                # randomly assign the weights
+                idx = torch.randperm(random_weights.nelement()).to(random_weights.device)
+                random_weights = random_weights.view(-1)[idx].view(random_weights.size())
+                self.embedding.weight.mul_(mask)
+                self.embedding.weight.add_(random_weights.mul_(entity_mask))
+            else:
+                idx = torch.randperm(random_weights.nelement()).to(random_weights.device)
+                random_weights = random_weights.view(-1)[idx].view(random_weights.size())
+                self.embedding.weight = nn.Parameter(random_weights)
             self.random_weights = random_weights.clone().detach()
 
 

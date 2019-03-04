@@ -6,6 +6,7 @@ import pandas as pd
 import os
 
 from codes.utils.config import get_config
+from contextlib import contextmanager
 
 TIME = "time"
 CONFIG = "config"
@@ -34,7 +35,6 @@ FILE_PATH = "file_path"
 log_types = [TIME, CONFIG, METRIC, METADATA]
 ALL_KEYS = [LOSS, BLEU, ENTOVERLAP, RELOVERLAP, BATCH_SIZE,
                                     BATCH_INDEX, EPOCH_INDEX, TIME_TAKEN, MODE, ITERATION_INDEX]
-
 
 def _format_log(log):
     return json.dumps(log)
@@ -162,7 +162,7 @@ def get_config_from_appid(app_id):
     logs = parse_log_file(log_file_path)
     return logs[CONFIG][0]
 
-def write_sequences(true_inp, true_outp, pred_outp, mode, epoch=0, exp_name='', remove_prev=True):
+def write_sequences(true_inp, true_outp, pred_outp, mode, epoch=0, exp_name='', remove_prev=True, conf=None, classes=None, test_fl=''):
     """
     Write sequences to csv
     :param true_inp:
@@ -173,15 +173,53 @@ def write_sequences(true_inp, true_outp, pred_outp, mode, epoch=0, exp_name='', 
     """
     base_path = os.path.dirname(os.path.realpath(__file__)).split('/codes')[0]
     logs_folder = str(base_path) + '/logs/'
-    filename = logs_folder + '{}_{}_epoch_{}.csv'.format(exp_name, mode, epoch)
+    test_fl = test_fl.split('/')[-1]
+    filename = logs_folder + '{}_{}_{}_epoch_{}.csv'.format(exp_name, mode, test_fl, epoch)
 
     if remove_prev and epoch > 0:
-        prev_filename = logs_folder + '{}_{}_epoch_{}.csv'.format(exp_name, mode, epoch - 1)
+        prev_filename = logs_folder + '{}_{}_{}_epoch_{}.csv'.format(exp_name, mode, test_fl, epoch - 1)
         try:
             os.remove(prev_filename)
         except OSError:
             pass
-
-    df = pd.DataFrame({'true_inp':true_inp, 'true_outp':true_outp, 'pred_outp': pred_outp})
+    confs = [','.join([str(ci) for ci in c]) for c in conf]
+    classes = [classes for d in true_inp]
+    df = pd.DataFrame({'true_inp':true_inp, 'true_outp':true_outp, 'pred_outp': pred_outp, 'conf': confs, 'target_class': classes})
     # Save in experiment folder
     df.to_csv(filename, index=False)
+
+class FakeExperiment():
+    """
+    Fake logger to disable comet
+    """
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def log_parameters(self, *args, **kwargs):
+        pass
+
+    def set_name(self, *args, **kwargs):
+        pass
+
+    @contextmanager
+    def train(self, cr):
+        pass
+
+    @contextmanager
+    def validate(self, cr):
+        pass
+
+    @contextmanager
+    def test(self, *args, **kwargs):
+        pass
+
+    def log_metric(self, *args, **kwargs):
+        pass
+
+    def log_dataset_info(self, *args, **kwargs):
+        pass
+
+
+
+
+

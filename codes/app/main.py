@@ -1,4 +1,4 @@
-from comet_ml import OfflineExperiment, ExistingExperiment
+from comet_ml import Experiment, ExistingExperiment
 from codes.experiment.experiment import run_experiment
 from codes.utils.config import get_config
 from codes.utils.util import set_seed, flatten_dictionary
@@ -35,7 +35,7 @@ if __name__ == '__main__':
         )
         logger = logging.getLogger()
         logger.info("Running new experiment")
-        ex = OfflineExperiment(offline_directory=os.path.join(log_base, 'comet_runs'),
+        ex = Experiment(api_key=config.log.comet.api_key,
                         workspace=config.log.comet.workspace,
                         project_name=config.log.comet.project_name,
                         disabled=True,

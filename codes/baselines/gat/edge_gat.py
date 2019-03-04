@@ -111,22 +111,36 @@ class GatEncoder(Net):
 
     def __init__(self,model_config, shared_embeddings=None):
         super(GatEncoder, self).__init__(model_config)
-        if not shared_embeddings:
-            self.embedding = torch.nn.Embedding(num_embeddings=self.model_config.vocab_size,
-                                          embedding_dim=self.model_config.embedding.dim,
-                                          max_norm=1)
-            torch.nn.init.xavier_uniform_(self.embedding.weight)
+
+        # flag to enable one-hot embedding if needed
+        self.graph_mode = True
+        self.one_hot = self.model_config.embedding.emb_type == 'one-hot'
+        if self.one_hot:
+            self.embedding = torch.nn.Embedding(num_embeddings=self.model_config.unique_nodes,
+                                                embedding_dim=self.model_config.unique_nodes)
+            self.embedding.weight = Parameter(torch.eye(self.model_config.unique_nodes))
+            self.model_config.embedding.dim = self.model_config.unique_nodes
+            self.model_config.graph.node_dim = self.model_config.unique_nodes
         else:
-            self.embedding = shared_embeddings
+            self.embedding = torch.nn.Embedding(num_embeddings=self.model_config.unique_nodes,
+                                                embedding_dim=self.model_config.embedding.dim,
+                                                max_norm=1)
+            torch.nn.init.xavier_uniform_(self.embedding.weight)
 
         # learnable embeddings
-        self.edge_embedding = torch.nn.Embedding(model_config.edge_types, model_config.graph.edge_dim)
-        torch.nn.init.xavier_uniform_(self.edge_embedding.weight)
+        if self.model_config.graph.edge_dim_type == 'one-hot':
+            self.edge_embedding = torch.nn.Embedding(model_config.edge_types, model_config.edge_types)
+            self.edge_embedding.weight = Parameter(torch.eye(self.model_config.edge_types))
+            self.model_config.graph.edge_dim = self.model_config.edge_types
+        else:
+            self.edge_embedding = torch.nn.Embedding(model_config.edge_types, model_config.graph.edge_dim)
+            torch.nn.init.xavier_uniform_(self.edge_embedding.weight)
 
-        self.att1 = EdgeGatConv(model_config.embedding.dim, model_config.embedding.dim,
-                                model_config.graph.edge_dim, heads=model_config.graph.num_reads, dropout=0.6)
-        self.att2 = EdgeGatConv(model_config.embedding.dim, model_config.embedding.dim,
-                                model_config.graph.edge_dim)
+        self.att1 = EdgeGatConv(self.model_config.embedding.dim, self.model_config.embedding.dim,
+                                self.model_config.graph.edge_dim, heads=self.model_config.graph.num_reads,
+                                dropout=self.model_config.graph.dropout)
+        self.att2 = EdgeGatConv(self.model_config.embedding.dim, self.model_config.embedding.dim,
+                                self.model_config.graph.edge_dim)
 
     def forward(self, batch):
         data = batch.geo_batch
@@ -150,8 +164,11 @@ class GatDecoder(Net):
     """
     def __init__(self, model_config):
         super(GatDecoder, self).__init__(model_config)
+        input_dim = model_config.embedding.dim * 3
+        if model_config.embedding.emb_type == 'one-hot':
+            input_dim = self.model_config.unique_nodes * 3
         self.decoder2vocab = self.get_mlp(
-            model_config.embedding.dim * 3,
+            input_dim,
             model_config.target_size
         )
 
