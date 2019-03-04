@@ -10,7 +10,7 @@ general:
   mode: train # can be train or infer
 dataset:
   base_url: http://localhost:9300/
-  data_path: data_c31c3670
+  data_path: data_9efcf814
   save_path: dtp.pkl
   load_save_path: false
   load_dictionary: false
@@ -25,8 +25,8 @@ dataset:
   sentence_mode: false #sentence mode processes each input story sentence separately. For GNN, this helps to maintaining a node pair -> sentence mapping
 model:
   name: graph
-  batch_size: 16
-  num_epochs: 20
+  batch_size: 100
+  num_epochs: 50
   num_entity_block: 20
   persist_per_epoch: -1
   early_stopping_patience: 1
@@ -53,6 +53,7 @@ model:
     #                              assignments in data this would not be an issue
     #       3. fixed, then set aside k random values for the entities but do not change them after one epoch
     entity_embedding_policy: learned
+    emb_type: random # can be one-hot or random, only for GAT
   optimiser:
     name: adam
     learning_rate: 0.001
@@ -91,6 +92,7 @@ model:
     node_dim: 100
     message_dim: 100
     edge_dim: 20
+    edge_dim_type: random # can be random or one-hot
     pos_rep: random # if random, then use a frozen embedding layer to denote the node position. if one-hot, then use just a one-hot embedding
     pos_dim: 5 # if above is random, then use this flag
     feature_dim: 10 # learns graph features

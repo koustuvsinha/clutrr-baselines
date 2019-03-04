@@ -127,6 +127,7 @@ config/*
 !config/mac.yaml
 !config/rn.yaml
 !config/rn_tpr.yaml
+!config/gat.yaml
 !config/gat_clean.yaml
 !config/gat_fixed.yaml
 !config/gat_random.yaml
