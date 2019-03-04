@@ -143,3 +143,5 @@ codes/runs/
 codes/*.sh
 *.zip
 scripts/
+sensitive.txt
+
