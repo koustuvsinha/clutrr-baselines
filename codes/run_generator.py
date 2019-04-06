@@ -52,8 +52,8 @@ def run_per_folder(args, run_num=0):
             run_file += "#SBATCH --job-name=clutrr_{}\n".format(exp_str)
             run_file += "#SBATCH --output=/checkpoint/koustuvs/jobs/{}_%j.out\n".format(exp_str)
             run_file += "#SBATCH --error=/checkpoint/koustuvs/jobs/{}_%j.err\n".format(exp_str)
-            run_file += "#SBATCH --comment=\"ACL Deadline 4/03/19\"\n"
-            run_file += "#SBATCH --partition=priority\n"
+            #run_file += "#SBATCH --comment=\"ACL Deadline 4/03/19\"\n"
+            run_file += "#SBATCH --partition=dev\n"
             run_file += "#SBATCH --nodes=1\n"
             run_file += "#SBATCH --ntasks-per-node={}\n".format(len(models))
             run_file += "#SBATCH --gres=gpu:{}\n".format(len(models))

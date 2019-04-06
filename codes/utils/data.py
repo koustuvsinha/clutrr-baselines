@@ -20,6 +20,8 @@ from torch_geometric.data import Batch as GeometricBatch
 import random
 from itertools import repeat, product
 from typing import List
+from codes.utils.bert_utils import BertLocalCache
+from tqdm import tqdm
 import logging
 logging.basicConfig(
     level=logging.INFO,
@@ -31,6 +33,9 @@ UNK_WORD = '<unk>'
 PAD_TOKEN = '<pad>'
 START_TOKEN = '<s>'
 END_TOKEN = '</s>'
+# bert tokens
+CLS_TOKEN = "[CLS]"
+SEP_TOKEN = "[SEP]"
 
 class DataRow():
     """
@@ -473,7 +478,7 @@ class DataUtility():
                     adj_mat[ent2_id][ent1_id] = 1
         return adj_mat
 
-    def prepare_for_dataloader(self, dataRows:List[DataRow]) -> List[DataRow]:
+    def prepare_for_dataloader(self, dataRows:List[DataRow], bert_cache:BertLocalCache=None) -> List[DataRow]:
         """
         Offload processing from dataloader get_item to here.
         :param dataRows:
@@ -481,6 +486,12 @@ class DataUtility():
         """
         for dataRow in dataRows:
             orig_inp = dataRow.story
+            orig_inp_sent = dataRow.story_sents
+            bert_inp = bert_cache.query(orig_inp_sent)
+            # here batch size is number of sentences. convert it back to one concatenation
+            # 2 x 10 x 768  -> 1 x 20 x 768
+            bert_inp = bert_inp.view(1,-1,bert_inp.size(2))
+
             # inp_row_graph = dataRow.story_graph
             inp_row_pos = []
 
@@ -557,11 +568,12 @@ class DataUtility():
             query_edge = [dataRow.query_edge]
             num_nodes = [len(nodes)]
             dataRow.pattrs = [inp_row, s_inp_row, inp_ents, query, text_query, query_mask, target, text_target,
-               sent_lengths, inp_ent_mask, geo_data, query_edge, num_nodes, sentence_pointer, orig_inp, inp_row_pos]
+               sent_lengths, inp_ent_mask, geo_data, query_edge, num_nodes, sentence_pointer, orig_inp, orig_inp_sent, bert_inp,
+                              inp_row_pos]
         return dataRows
 
 
-    def get_dataloader(self, mode='train', test_file=''):
+    def get_dataloader(self, mode='train', test_file='', bert_cache=None):
         """
         Return a new SequenceDataLoader instance with appropriate rows
         :param mode: train/val/test
@@ -584,7 +596,7 @@ class DataUtility():
         if self.sentence_mode:
             collate_FN = sent_collate_fn
 
-        dataRows = self.prepare_for_dataloader(dataRows)
+        dataRows = self.prepare_for_dataloader(dataRows, bert_cache)
 
         """
 
@@ -606,7 +618,9 @@ class DataUtility():
         for i in range(0, len(dataRows), batch_size):
             data = [dataRows[i].pattrs for i in range(i, i+batch_size) if i < len(dataRows)]
             data.sort(key=lambda x: len(x[0]), reverse=True)
-            inp_data, s_inp_data, inp_ents, query, text_query, query_mask, target, text_target, sent_lengths, inp_ent_mask, geo_data, query_edge, num_nodes, *_ = zip(
+            inp_data, s_inp_data, inp_ents, query, text_query, query_mask, target, text_target, \
+            sent_lengths, inp_ent_mask, geo_data, query_edge, num_nodes, \
+            sentence_pointer, orig_inp, orig_inp_sent, bert_inp, *_ = zip(
                 *data)
             inp_data, inp_lengths = simple_merge(inp_data)
             s_inp_data, sent_lengths = sent_merge(s_inp_data, sent_lengths)
@@ -626,6 +640,8 @@ class DataUtility():
             # update the slices - same number of nodes
             slices = [max_node for s in slices]
             query_edge = torch.LongTensor(query_edge)
+            bert_inp = torch.cat(bert_inp, dim=0)
+            assert bert_inp.size(0) == batch_size
 
             # prepare batch
             batch = Batch(
@@ -633,6 +649,9 @@ class DataUtility():
                 s_inp=s_inp_data,
                 inp_lengths=inp_lengths,
                 sent_lengths=sent_lengths,
+                orig_inp=orig_inp,
+                orig_inp_sent=orig_inp_sent,
+                bert_inp=bert_inp,
                 target=target,
                 text_target=text_target,
                 text_target_lengths=text_target_lengths,
@@ -642,12 +661,27 @@ class DataUtility():
                 inp_ent_mask=torch.LongTensor(inp_ent_mask),
                 geo_batch=geo_batch,
                 query_edge=query_edge,
-                geo_slices=slices
+                geo_slices=slices,
             )
-            batch.to_device('cuda')
+            #batch.to_device('cuda')
             batches.append(batch)
         print("done precomputing batches {}".format(len(batches)))
         return batches
+
+    def update_bert_cache(self, bert_cache:BertLocalCache):
+        """
+        Preload all sentences from BERT
+        :param bert_cache:
+        :return:
+        """
+        logging.info("Bert caching train rows .. ")
+        for idx, dataRow in self.dataRows['train'].items():
+            bert_cache.update_cache(dataRow.story_sents)
+        logging.info("Bert caching test rows .. ")
+        for flname, dataRows in self.dataRows['test'].items():
+            for idx, dataRow in dataRows.items():
+                bert_cache.update_cache(dataRow.story_sents)
+        bert_cache.run_bert()
 
 
     def map_text_to_id(self, text):

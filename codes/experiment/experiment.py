@@ -18,6 +18,7 @@ import glob
 from io import BytesIO
 from zipfile import ZipFile
 from urllib.request import urlopen
+from codes.utils.bert_utils import BertLocalCache
 import json
 import logging
 for handler in logging.root.handlers[:]:
@@ -82,12 +83,14 @@ def run_experiment(config, exp, resume=False):
     # generate dictionary
     generate_dictionary(config)
     data_util = DataUtility(config)
+    data_base_path = os.path.join(parent_dir, 'data', config.dataset.data_path)
+    data_pkl_path = os.path.join(data_base_path, config.dataset.save_path)
     if config.dataset.load_save_path or config.general.mode == 'infer' or resume:
-        data_util.load(os.path.join(parent_dir, 'data', config.dataset.data_path, config.dataset.save_path))
+        data_util.load(data_pkl_path)
     else:
         data_util.process_data(base_path,
                                config.dataset.train_file, load_dictionary=True)
-        data_util.save(os.path.join(parent_dir, 'data', config.dataset.data_path, config.dataset.save_path))
+        data_util.save(data_pkl_path)
 
     vocab_size = len(data_util.word2id)
     config.log.logger.info("Vocab Size : {}".format(vocab_size))
@@ -110,13 +113,21 @@ def run_experiment(config, exp, resume=False):
         config.model.graph.edge_dim = config.model.encoder.hidden_dim * 2
     device = torch.device(get_device_name(device_type=config.general.device))
     experiment.config = config
+    # precompute bert
+    bert_cache = BertLocalCache(config)
+    if bert_cache.is_cache_present(data_base_path):
+        bert_cache.load_cache(data_base_path)
+    else:
+        data_util.update_bert_cache(bert_cache)
+        bert_cache.save_cache(data_base_path)
+
     experiment.data_util = data_util
-    experiment.dataloaders.train = data_util.get_dataloader(mode='train')
-    experiment.dataloaders.val = data_util.get_dataloader(mode='val')
+    experiment.dataloaders.train = data_util.get_dataloader(mode='train', bert_cache=bert_cache)
+    experiment.dataloaders.val = data_util.get_dataloader(mode='val', bert_cache=bert_cache)
     experiment.dataloaders.test = {}
     for test_file in sorted(config.dataset.test_files):
         test_rel = int(test_file.split('_test.csv')[0].split('.')[-1])
-        experiment.dataloaders.test[test_file] = { 'dl': data_util.get_dataloader(mode='test',
+        experiment.dataloaders.test[test_file] = { 'dl': data_util.get_dataloader(mode='test', bert_cache=bert_cache,
             test_file=test_file), 'test_rel': test_rel}
         print("created dataloader for file {}".format(test_file))
     experiment.model.encoder, experiment.model.decoder = choose_model(config)
