@@ -114,20 +114,20 @@ def run_experiment(config, exp, resume=False):
     device = torch.device(get_device_name(device_type=config.general.device))
     experiment.config = config
     # precompute bert
-    bert_cache = BertLocalCache(config)
-    if bert_cache.is_cache_present(data_base_path):
-        bert_cache.load_cache(data_base_path)
-    else:
-        data_util.update_bert_cache(bert_cache)
-        bert_cache.save_cache(data_base_path)
+    # bert_cache = BertLocalCache(config)
+    # if bert_cache.is_cache_present(data_base_path):
+    #     bert_cache.load_cache(data_base_path)
+    # else:
+    #     data_util.update_bert_cache(bert_cache)
+    #     bert_cache.save_cache(data_base_path)
 
     experiment.data_util = data_util
-    experiment.dataloaders.train = data_util.get_dataloader(mode='train', bert_cache=bert_cache)
-    experiment.dataloaders.val = data_util.get_dataloader(mode='val', bert_cache=bert_cache)
+    experiment.dataloaders.train = data_util.get_dataloader(mode='train')
+    experiment.dataloaders.val = data_util.get_dataloader(mode='val')
     experiment.dataloaders.test = {}
     for test_file in sorted(config.dataset.test_files):
         test_rel = int(test_file.split('_test.csv')[0].split('.')[-1])
-        experiment.dataloaders.test[test_file] = { 'dl': data_util.get_dataloader(mode='test', bert_cache=bert_cache,
+        experiment.dataloaders.test[test_file] = { 'dl': data_util.get_dataloader(mode='test',
             test_file=test_file), 'test_rel': test_rel}
         print("created dataloader for file {}".format(test_file))
     experiment.model.encoder, experiment.model.decoder = choose_model(config)

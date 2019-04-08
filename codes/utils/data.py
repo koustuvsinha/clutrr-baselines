@@ -21,7 +21,9 @@ import random
 from itertools import repeat, product
 from typing import List
 from codes.utils.bert_utils import BertLocalCache
+from pytorch_pretrained_bert.tokenization import BertTokenizer
 from tqdm import tqdm
+import pdb
 import logging
 logging.basicConfig(
     level=logging.INFO,
@@ -87,6 +89,9 @@ class DataUtility():
         self.sentence_mode = config.dataset.sentence_mode
         self.single_abs_line = config.dataset.single_abs_line
         self.num_entity_block = config.model.num_entity_block  # number of entity vectors we want to block off
+        self.process_bert = config.dataset.process_bert
+        if self.process_bert:
+            self.bert_tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True)
 
         self.word2id = {}
         self.id2word = {}
@@ -240,7 +245,13 @@ class DataUtility():
                 for idx, ent in enumerate(uniq_ents):
                     entity_id = random.choice(entity_id_block)
                     entity_id_block.remove(entity_id)
-                    entity_map[ent] = '@ent{}'.format(entity_id)
+                    if self.process_bert:
+                        # if bert, then replace the entities with pure numbers, as otherwise we would not
+                        # have an unique embedding. Also, make sure the text doesn't contain any numbers before hand
+                        # TODO: remove numbers
+                        entity_map[ent] = '{}'.format(entity_id)
+                    else:
+                        entity_map[ent] = '@ent{}'.format(entity_id)
                     story = story.replace('[{}]'.format(ent), entity_map[ent])
                     text_target = text_target.replace('[{}]'.format(ent), entity_map[ent])
                     text_query = text_query.replace('[{}]'.format(ent), entity_map[ent])
@@ -284,7 +295,12 @@ class DataUtility():
             dataRow = DataRow()
             dataRow.id = row['id']
             story_sents = sent_tokenize(row['story'])
-            story_sents = [self.tokenize(sent) for sent in story_sents]
+            if self.process_bert:
+                story_sents = [self.bert_tokenizer.tokenize(sent) for sent in story_sents]
+            else:
+                story_sents = [self.tokenize(sent) for sent in story_sents]
+            if self.process_bert:
+                story_sents = [[CLS_TOKEN] + sent + [SEP_TOKEN] for sent in story_sents]
             words.update([word for sent in story_sents for word in sent])
             dataRow.story_sents = story_sents
             dataRow.story = [word for sent in story_sents for word in sent] # flatten
@@ -296,7 +312,10 @@ class DataUtility():
                 words.update([word for word in text_target])
             if self.data_has_text_query:
                 # preprocess text_query
-                text_query = self.tokenize(row['text_query'])
+                if self.process_bert:
+                    text_query = self.bert_tokenizer.tokenize(row['text_query'])
+                else:
+                    text_query = self.tokenize(row['text_query'])
                 dataRow.text_query = text_query
                 words.update([word for word in text_query])
             max_sl = max([len(s) for s in story_sents])
@@ -487,23 +506,31 @@ class DataUtility():
         for dataRow in dataRows:
             orig_inp = dataRow.story
             orig_inp_sent = dataRow.story_sents
-            bert_inp = bert_cache.query(orig_inp_sent)
+            # This is bert_as_a_service code. Now trying hugging face code
+            # bert_inp = bert_cache.query(orig_inp_sent)
             # here batch size is number of sentences. convert it back to one concatenation
             # 2 x 10 x 768  -> 1 x 20 x 768
-            bert_inp = bert_inp.view(1,-1,bert_inp.size(2))
+            # bert_inp = bert_inp.view(1,-1,bert_inp.size(2))
+            bert_inp = None
 
             # inp_row_graph = dataRow.story_graph
             inp_row_pos = []
 
             # for sentence tokenizations
             sent_lengths = [len(sent) for sent in dataRow.story_sents]
-            s_inp_row = [[self.get_token(word) for word in sent] for sent in dataRow.story_sents]
+            if self.process_bert:
+                s_inp_row = [self.bert_tokenizer.convert_tokens_to_ids(sent) for sent in dataRow.story_sents]
+            else:
+                s_inp_row = [[self.get_token(word) for word in sent] for sent in dataRow.story_sents]
             #s_inp_ents = [[id for id in sent if id in self.entity_ids] for sent in inp_row]
             #s_inp_row_pos = [[widx + 1 for widx, word in enumerate(sent)] for sent in inp_row]
 
             # for word tokenizations
             # sent_lengths = [len(dataRow.story)]
-            inp_row = [self.get_token(word) for word in dataRow.story]
+            if self.process_bert:
+                inp_row = [word for sent in s_inp_row for word in sent]
+            else:
+                inp_row = [self.get_token(word) for word in dataRow.story]
             inp_ents = list(set([id for id in inp_row if id in self.entity_ids]))
 
             ## calculate one-hot mask for entities which are used in this row
@@ -536,11 +563,14 @@ class DataUtility():
 
             # calculate the output
             target = [dataRow.target]
-            query = [self.get_token(tp) for tp in dataRow.query]  # tuple
-            # debugging
-            if self.get_token('UNKUNK') in query:
-                print("shit")
-                raise AssertionError("Unknown element cannot be in the query. Check the data.")
+            if self.process_bert:
+                query = self.bert_tokenizer.convert_tokens_to_ids(list(dataRow.query))
+            else:
+                query = [self.get_token(tp) for tp in dataRow.query]  # tuple
+                # debugging
+                if self.get_token('UNKUNK') in query:
+                    print("shit")
+                    raise AssertionError("Unknown element cannot be in the query. Check the data.")
             # one hot integer mask over the input text which specifies the query strings
             query_mask = [[1 if w == ent else 0 for w in self.__flatten__(inp_row)] for ent in query]
             # TODO: use query_text and query_text length and pass it back
@@ -640,8 +670,8 @@ class DataUtility():
             # update the slices - same number of nodes
             slices = [max_node for s in slices]
             query_edge = torch.LongTensor(query_edge)
-            bert_inp = torch.cat(bert_inp, dim=0)
-            assert bert_inp.size(0) == batch_size
+            bert_inp = None #torch.cat(bert_inp, dim=0)
+            # assert bert_inp.size(0) == batch_size
 
             # prepare batch
             batch = Batch(

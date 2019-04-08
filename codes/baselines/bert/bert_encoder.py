@@ -8,7 +8,7 @@ import torch.nn as nn
 from codes.net.base_net import Net
 import pdb
 import numpy as np
-from pytorch_pretrained_bert.modeling import BertForSequenceClassification
+from pytorch_pretrained_bert import BertModel
 
 
 class BERTEncoder(Net):
@@ -23,7 +23,13 @@ class BERTEncoder(Net):
         else:
             self.embedding = shared_embeddings
 
+        self.model = BertModel.from_pretrained('bert-base-uncased')
+        self.model.eval()
+
     def forward(self, batch):
-        out = batch.bert_inp
-        # fix for special tokens
+        pdb.set_trace()
+        out = batch.inp
+        with torch.no_grad():
+            layer_outs, _ = self.model(out, output_all_encoded_layers=True)
+        out = layer_outs[-1]
         return out, None

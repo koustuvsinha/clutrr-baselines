@@ -141,7 +141,7 @@ class Batch:
                      geo_batch=self.geo_batch,  # Pytorch Geometric Batch object (collection of Pytorch Data objects),
                      geo_slices=self.geo_slices,  # Pytorch Geometric slices, to restore the original splits
                      query_edge=self.query_edge.clone().detach(),
-                     bert_inp=self.bert_inp.clone().detach()
+                     # bert_inp=self.bert_inp.clone().detach()
                      )
 
 
