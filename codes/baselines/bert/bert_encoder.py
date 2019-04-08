@@ -27,7 +27,6 @@ class BERTEncoder(Net):
         self.model.eval()
 
     def forward(self, batch):
-        pdb.set_trace()
         out = batch.inp
         with torch.no_grad():
             layer_outs, _ = self.model(out, output_all_encoded_layers=True)
