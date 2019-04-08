@@ -300,7 +300,8 @@ class DataUtility():
             else:
                 story_sents = [self.tokenize(sent) for sent in story_sents]
             if self.process_bert:
-                story_sents = [[CLS_TOKEN] + sent + [SEP_TOKEN] for sent in story_sents]
+                story_sents = [sent + [SEP_TOKEN] for sent in story_sents]
+                story_sents[0] = [CLS_TOKEN] + story_sents[0]
             words.update([word for sent in story_sents for word in sent])
             dataRow.story_sents = story_sents
             dataRow.story = [word for sent in story_sents for word in sent] # flatten
@@ -533,6 +534,14 @@ class DataUtility():
                 inp_row = [self.get_token(word) for word in dataRow.story]
             inp_ents = list(set([id for id in inp_row if id in self.entity_ids]))
 
+            # bert specific variables
+            bert_input_mask = [1] * len(inp_row)
+            # for BERT, the segment ids denote each sentence.
+            bert_segment_ids = []
+            for s_id, sent in enumerate(s_inp_row):
+                bert_segment_ids.extend([0]*len(sent))
+
+
             ## calculate one-hot mask for entities which are used in this row
             flat_inp_ents = inp_ents
             if self.sentence_mode:
@@ -599,7 +608,7 @@ class DataUtility():
             num_nodes = [len(nodes)]
             dataRow.pattrs = [inp_row, s_inp_row, inp_ents, query, text_query, query_mask, target, text_target,
                sent_lengths, inp_ent_mask, geo_data, query_edge, num_nodes, sentence_pointer, orig_inp, orig_inp_sent, bert_inp,
-                              inp_row_pos]
+                              inp_row_pos, bert_input_mask, bert_segment_ids]
         return dataRows
 
 
@@ -650,12 +659,14 @@ class DataUtility():
             data.sort(key=lambda x: len(x[0]), reverse=True)
             inp_data, s_inp_data, inp_ents, query, text_query, query_mask, target, text_target, \
             sent_lengths, inp_ent_mask, geo_data, query_edge, num_nodes, \
-            sentence_pointer, orig_inp, orig_inp_sent, bert_inp, *_ = zip(
+            sentence_pointer, orig_inp, orig_inp_sent, bert_inp, _, bert_input_mask, bert_segment_ids = zip(
                 *data)
             inp_data, inp_lengths = simple_merge(inp_data)
             s_inp_data, sent_lengths = sent_merge(s_inp_data, sent_lengths)
             # outp_data, outp_lengths = simple_merge(outp_data)
             text_target, text_target_lengths = simple_merge(text_target)
+            bert_input_mask, _ = simple_merge(bert_input_mask)
+            bert_segment_ids, _ = simple_merge(bert_segment_ids)
 
             query = torch.LongTensor(query)
             query_mask = pad_ents(query_mask, inp_lengths)
@@ -692,6 +703,8 @@ class DataUtility():
                 geo_batch=geo_batch,
                 query_edge=query_edge,
                 geo_slices=slices,
+                bert_segment_ids=bert_segment_ids,
+                bert_input_mask=bert_input_mask
             )
             #batch.to_device('cuda')
             batches.append(batch)
