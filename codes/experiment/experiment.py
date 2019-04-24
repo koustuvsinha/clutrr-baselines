@@ -19,6 +19,7 @@ from io import BytesIO
 from zipfile import ZipFile
 from urllib.request import urlopen
 from codes.utils.bert_utils import BertLocalCache
+import pdb
 import json
 import logging
 for handler in logging.root.handlers[:]:
@@ -146,7 +147,7 @@ def run_experiment(config, exp, resume=False):
         experiment.load_checkpoint(exp.id)
     # set device
     experiment.device = device
-    experiment.validation_metrics = get_metric_dict(time_span=10)
+    experiment.validation_metrics = get_metric_dict(time_span=20)
     experiment.quality_metrics = QualityMetric(data=data_util)
     experiment.metric_to_perform_early_stopping = config.model.early_stopping.metric_to_track
     experiment.generator = Generator(experiment.data_util, experiment.model,
@@ -172,9 +173,14 @@ def _run_epochs(experiment):
     for key in validation_metrics_dict:
         validation_metrics_dict[key].reset()
     while experiment.epoch_index <= config.model.num_epochs:
+    #while not validation_metrics_dict[metric_to_perform_early_stopping].should_stop_early():
+        print('Should stop early : ', validation_metrics_dict[metric_to_perform_early_stopping].should_stop_early())
+        print(validation_metrics_dict[metric_to_perform_early_stopping])
         experiment.epoch_index += 1
         config.log.logger.info("Epoch {}".format(experiment.epoch_index))
-        _run_one_epoch_train_val(experiment)
+        train_loss, train_acc, val_loss, val_acc = _run_one_epoch_train_val(experiment)
+        validation_metrics_dict['val_loss'].update(val_loss)
+        validation_metrics_dict['val_acc'].update(val_acc)
         for scheduler in experiment.schedulers:
             if config.model.scheduler_type == "exp":
                 scheduler.step()
@@ -199,16 +205,18 @@ def _run_epochs(experiment):
 
 
 def _run_one_epoch_train_val(experiment):
+    train_loss, train_acc, val_acc, val_loss = 0,0,0,0
     if (experiment.dataloaders.train):
         with experiment.comet_ml.train():
-            _run_one_epoch(experiment.dataloaders.train, experiment,
+            train_loss, train_acc = _run_one_epoch(experiment.dataloaders.train, experiment,
                            mode="train",
                            filename=experiment.config.dataset.train_file)
     if (experiment.dataloaders.val):
         with experiment.comet_ml.validate():
-            _run_one_epoch(experiment.dataloaders.val, experiment,
+            val_loss, val_acc = _run_one_epoch(experiment.dataloaders.val, experiment,
                            mode="val",
                            filename=experiment.config.dataset.train_file)
+    return train_loss, train_acc, val_loss, val_acc
 
 def _run_one_epoch_test(experiment):
     test_accs = []
@@ -305,9 +313,9 @@ def _run_one_epoch(dataloader, experiment, mode, filename=''):
     loss = aggregated_batch_loss / num_examples
     epoch_rel = np.mean(epoch_rel)
     base_file = filename.split('/')[-1]
-    if mode == 'val':
-        experiment.validation_metrics['val_acc'].update(epoch_rel)
-        experiment.validation_metrics['val_loss'].update(loss)
+    # if mode == 'val':
+    #     experiment.validation_metrics['val_acc'].update(epoch_rel)
+    #     experiment.validation_metrics['val_loss'].update(loss)
     experiment.config.log.logger.info(" -------------------------- ")
     experiment.config.log.logger.info("togrep_{} ; {} ; Epoch : {} ; Data : {} ; File : {} ; Loss : {} ; Accuracy : {}".format(
         mode, experiment.config.general.id, experiment.epoch_index, experiment.config.dataset.data_path, filename,
@@ -324,8 +332,8 @@ def _run_one_epoch(dataloader, experiment, mode, filename=''):
         assert len(true_inp) == len(true_outp) == len(pred_outp)
         write_sequences(true_inp, true_outp, pred_outp, mode, experiment.epoch_index,
                         exp_name=experiment.config.general.id, test_fl=filename, conf=confidences, classes=experiment.config.model.classes)
-    if experiment.config.general.mode == 'train' and experiment.config.model.checkpoint:
-        experiment.save_checkpoint(is_best=False)
+    #if experiment.config.general.mode == 'train' and experiment.config.model.checkpoint:
+    #    experiment.save_checkpoint(is_best=False)
 
     return loss, epoch_rel
 

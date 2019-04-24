@@ -13,7 +13,7 @@ class SimpleEncoder(Net):
     """
     Simple LSTM Encoder
     """
-    def __init__(self, model_config, shared_embeddings=None):
+    def __init__(self, model_config, shared_embeddings=None, use_embedding=True):
         super().__init__(model_config)
 
         if not shared_embeddings:
@@ -30,10 +30,13 @@ class SimpleEncoder(Net):
             dropout=model_config.encoder.dropout
         )
 
+        self.use_embedding = use_embedding
+
     def forward(self, batch):
         data = batch.inp
         inp_len = np.array(batch.inp_lengths)
-        data = self.embedding(data)
+        if self.use_embedding:
+            data = self.embedding(data)
         # sort
         inp_len_sorted, idx_sort = np.sort(inp_len)[::-1], np.argsort(-inp_len)
         inp_len_sorted = inp_len_sorted.copy()

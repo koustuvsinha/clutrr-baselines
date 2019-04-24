@@ -80,6 +80,10 @@ class TrackableMetric():
     def current_value(self):
         return self._current_value
 
+    def __str__(self):
+        return "Name : {}, Counter : {}, Time Span : {}, Value: {}, Current Value: {}".format(self._name, self._counter,
+                                self._time_span, self._value, self._current_value)
+
 if __name__ == '__main__':
     metric_dict = {
         "loss": TrackableMetric(name="loss", default_value=1e6, time_span=10, mode="min"),

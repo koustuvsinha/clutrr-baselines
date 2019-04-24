@@ -528,11 +528,17 @@ class DataUtility():
 
             # for word tokenizations
             # sent_lengths = [len(dataRow.story)]
+            bert_entity_dict = {}
             if self.process_bert:
                 inp_row = [word for sent in s_inp_row for word in sent]
+                entity_ids = [str(x-1) for x in self.entity_ids] # -1 to accomodate 0
+                bert_entity_ids = self.bert_tokenizer.convert_tokens_to_ids(entity_ids)
+                for entid, b_entid in zip(entity_ids, bert_entity_ids):
+                    bert_entity_dict[b_entid] = entid
+                inp_ents = list(set(id for id in inp_row if id in bert_entity_ids))
             else:
                 inp_row = [self.get_token(word) for word in dataRow.story]
-            inp_ents = list(set([id for id in inp_row if id in self.entity_ids]))
+                inp_ents = list(set([id for id in inp_row if id in self.entity_ids]))
 
             # bert specific variables
             bert_input_mask = [1] * len(inp_row)
@@ -546,7 +552,12 @@ class DataUtility():
             flat_inp_ents = inp_ents
             if self.sentence_mode:
                 flat_inp_ents = [p for x in inp_ents for p in x]
-            inp_ent_mask = [1 if idx + 1 in flat_inp_ents else 0 for idx in range(len(self.entity_ids))]
+
+            if self.process_bert:
+                inp_ent_mask = [1 if w in bert_entity_dict else 0 for w in inp_row]
+                bert_inp = [int(bert_entity_dict[w])+1 if w in bert_entity_dict else 0 for w in inp_row]
+            else:
+                inp_ent_mask = [1 if idx + 1 in flat_inp_ents else 0 for idx in range(len(self.entity_ids))]
 
             # calculate for each entity pair which sentences contain them
             # output should be a max_entity x max_entity x num_sentences --> which should be later padded
@@ -667,6 +678,7 @@ class DataUtility():
             text_target, text_target_lengths = simple_merge(text_target)
             bert_input_mask, _ = simple_merge(bert_input_mask)
             bert_segment_ids, _ = simple_merge(bert_segment_ids)
+            inp_ent_mask,_ = simple_merge(inp_ent_mask)
 
             query = torch.LongTensor(query)
             query_mask = pad_ents(query_mask, inp_lengths)
@@ -681,7 +693,7 @@ class DataUtility():
             # update the slices - same number of nodes
             slices = [max_node for s in slices]
             query_edge = torch.LongTensor(query_edge)
-            bert_inp = None #torch.cat(bert_inp, dim=0)
+            bert_inp,_ = simple_merge(bert_inp) #torch.cat(bert_inp, dim=0)
             # assert bert_inp.size(0) == batch_size
 
             # prepare batch
@@ -699,7 +711,7 @@ class DataUtility():
                 inp_ents=inp_ents,
                 query=query,
                 query_mask=query_mask,
-                inp_ent_mask=torch.LongTensor(inp_ent_mask),
+                inp_ent_mask=inp_ent_mask,
                 geo_batch=geo_batch,
                 query_edge=query_edge,
                 geo_slices=slices,
