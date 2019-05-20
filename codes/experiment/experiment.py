@@ -33,6 +33,7 @@ def get_data(config):
     if not os.path.exists(base_path):
         os.makedirs(base_path)
     data_path = os.path.join(base_path, config.dataset.data_path)
+    print(data_path)
     if not os.path.exists(data_path):
         remote = "{}/{}.zip".format(config.dataset.base_url, config.dataset.data_path)
         config.log.logger.info("Downloading data from {}".format(remote))

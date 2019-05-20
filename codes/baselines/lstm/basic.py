@@ -136,7 +136,10 @@ class SimpleDecoder(Net):
                 emb = torch.max(encoder_outputs, 1)[0]
             elif self.pool_type == 'mean':
                 sent_len = torch.FloatTensor(batch.inp_lengths.copy()).unsqueeze(1).to(encoder_outputs.device)
-                emb = torch.sum(encoder_outputs, 1).squeeze(0)
+                emb = torch.sum(encoder_outputs, 1)
+                # BUG FIX: fails if batchsize is 1
+                if emb.dim() > 2:
+                    emb = emb.squeeze(0)
                 emb = emb / sent_len.expand_as(emb)
             elif self.pool_type == 'concat':
                 sent_len = torch.FloatTensor(batch.inp_lengths.copy()).unsqueeze(1).to(encoder_outputs.device)

@@ -6,6 +6,9 @@ from codes.utils.argument_parser import argument_parser
 from addict import Dict
 import os
 import logging
+import sys
+import signal
+import socket
 
 base_path = os.path.dirname(os.path.realpath(__file__)).split('codes')[0]
 
@@ -19,7 +22,51 @@ def resume(config, experiment):
     set_seed(seed=config.general.seed)
     run_experiment(config, experiment, resume=True)
 
+# SLURM REQUEUE LOGIC
+def get_job_id():
+    if 'SLURM_ARRAY_JOB_ID' in os.environ:
+        return '%s_%s' % (os.environ['SLURM_ARRAY_JOB_ID'],
+                          os.environ['SLURM_ARRAY_TASK_ID'])
+    else:
+        return os.environ['SLURM_JOB_ID']
+
+
+
+def requeue_myself():
+    job_id = get_job_id()
+    logging.warning("Requeuing job %s", job_id)
+    os.system('scontrol requeue %s' % job_id)
+
+
+
+def sig_handler(signum, frame):
+    logger.warning("Signal handler called with signal " + str(signum))
+    prod_id = int(os.environ['SLURM_PROCID'])
+    job_id = get_job_id()
+    logging.warning(
+        "Host: %s - Global rank: %i" % (socket.gethostname(), prod_id))
+    if prod_id == 0:
+        requeue_myself()
+    else:
+        logging.warning("Not the master process, no need to requeue.")
+    sys.exit(-1)
+
+
+def term_handler(signum, frame):
+    logging.warning("Signal handler called with signal " + str(signum))
+    logging.warning("Bypassing SIGTERM.")
+
+
+def init_signal_handler():
+    """
+    Handle signals sent by SLURM for time limit / pre-emption.
+    """
+    signal.signal(signal.SIGUSR1, sig_handler)
+    signal.signal(signal.SIGTERM, term_handler)
+    logging.warning("Signal handler installed.")
+
 if __name__ == '__main__':
+    init_signal_handler()
     config_id, exp_id = argument_parser()
     print(config_id)
     if len(exp_id) == 0:
