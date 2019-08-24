@@ -558,6 +558,7 @@ class DataUtility():
                 bert_inp = [int(bert_entity_dict[w])+1 if w in bert_entity_dict else 0 for w in inp_row]
             else:
                 inp_ent_mask = [1 if idx + 1 in flat_inp_ents else 0 for idx in range(len(self.entity_ids))]
+                bert_inp = inp_row  # dummy
 
             # calculate for each entity pair which sentences contain them
             # output should be a max_entity x max_entity x num_sentences --> which should be later padded
