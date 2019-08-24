@@ -58,6 +58,21 @@ def get_sample_config():
 
     return config
 
+def save_config(config, config_id=None):
+    """
+    Save the config to be read again later
+    :param config:
+    :param config_id:
+    :return:
+    """
+    print(os.path.dirname(os.path.realpath(__file__)))
+    path = os.path.dirname(os.path.realpath(__file__)).split('codes')[0]
+    config_name = "config.yaml"
+    if (config_id):
+        config_name = "{}.yaml".format(config_id)
+    return yaml.dump(config, open(os.path.join(path, 'config', config_name),'w'), default_flow_style=False)
+
+
 
 def _post_process(config):
     # Post Processing on the config addict
