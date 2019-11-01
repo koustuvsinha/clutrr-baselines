@@ -45,4 +45,4 @@ If our work is useful for your research, consider citing it using the following 
 * Website: https://www.cs.mcgill.ca/~ksinha4/clutrr/
 
 ## License
-CLUTRR is CC-BY-NC 4.0 (Attr Non-Commercial Inter.) licensed, as found in the LICENSE file.
+CLUTRR-Baselines is CC-BY-NC 4.0 (Attr Non-Commercial Inter.) licensed, as found in the LICENSE file.
