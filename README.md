@@ -3,7 +3,7 @@
 Codebase for experiments on the [CLUTRR benchmark suite](https://github.com/facebookresearch/clutrr/).
 
 - Paper: https://arxiv.org/abs/1908.06177
-- Webpage: https://www.cs.mcgill.ca/~ksinha4/introducing-clutrr/
+- Blog: https://www.cs.mcgill.ca/~ksinha4/introducing-clutrr/
 
 ### Usage
 
@@ -24,3 +24,25 @@ Codebase for experiments on the [CLUTRR benchmark suite](https://github.com/face
 - Pandas
 - Pyyaml
 - tqdm
+
+## Citation
+
+If our work is useful for your research, consider citing it using the following bibtex:
+
+```
+@article{sinha2019clutrr,
+  Author = {Koustuv Sinha and Shagun Sodhani and Jin Dong and Joelle Pineau and William L. Hamilton},
+  Title = {CLUTRR: A Diagnostic Benchmark for Inductive Reasoning from Text},
+  Year = {2019},
+  journal = {Empirical Methods of Natural Language Processing (EMNLP)},
+  arxiv = {1908.06177}
+}
+```
+
+## Join the CLUTRR community
+
+* Main Repo: https://github.com/facebookresearch/clutrr
+* Website: https://www.cs.mcgill.ca/~ksinha4/clutrr/
+
+## License
+CLUTRR is CC-BY-NC 4.0 (Attr Non-Commercial Inter.) licensed, as found in the LICENSE file.
