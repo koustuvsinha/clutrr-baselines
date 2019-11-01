@@ -7,7 +7,6 @@
     - **baselines** - folder to contain all the baselines.
     - **experiment** - Experiment running and maintainance code is in `experiment.py`. 
     - **metric** - contains metrics to calculate and track
-    - **models** - contains experimental models
     - **net** - contains modelling boilerplates, such as base network, attention modules, generators, and batch classes.
     - **utils** - utility belt containing various reusable utilities for the entire experiment
 - **config** - contains hyperparams and configs in `yaml` files.
